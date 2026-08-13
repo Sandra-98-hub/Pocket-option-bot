@@ -2,8 +2,15 @@ console.log("Pocket Option Signal Bot");
 console.log("========================");
 console.log("Market: OTC M1");
 console.log("Status: ACTIVE");
-console.log("Waiting for market data...");
 
-setInterval(() => {
-  console.log("Bot is still running...");
-}, 30000);
+function generateSignal() {
+  const signals = ["BUY", "SELL"];
+  const signal = signals[Math.floor(Math.random() * signals.length)];
+
+  console.log(`Signal: ${signal}`);
+  console.log("Waiting for next signal...");
+}
+
+generateSignal();
+
+setInterval(generateSignal, 60000);
