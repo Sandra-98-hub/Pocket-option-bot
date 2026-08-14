@@ -1,3 +1,4 @@
+
 console.log("Pocket Option Signal Bot");
 console.log("========================");
 console.log("Market: EUR/USD OTC");
@@ -64,16 +65,6 @@ generateSignal();
 
 setInterval(generateSignal, 60000);
 
-const http = require("http");
-
-const PORT = process.env.PORT || 10000;
-
-http.createServer((req, res) => {
-  res.writeHead(200);
-  res.end("Pocket Option Bot is running");
-}).listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
 const http = require("http");
 
 const PORT = process.env.PORT || 10000;
