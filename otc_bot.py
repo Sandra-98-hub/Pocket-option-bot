@@ -57,6 +57,7 @@ async def main():
 
     client = AsyncPocketOptionClient(
         ssid=ssid,
+        is_demo=False,
         enable_logging=False
     )
 
