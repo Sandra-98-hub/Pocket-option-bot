@@ -20,7 +20,7 @@ async def main():
     print("Waiting for real OTC candles...")
 
     async for candle in client.subscribe_symbol("EURUSD_otc"):
-        print("REAL OTC CANDLE:", candle)
+        print("OTC CANDLE:", candle)
 
 if __name__ == "__main__":
     asyncio.run(main())
