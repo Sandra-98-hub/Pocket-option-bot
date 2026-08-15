@@ -1,3 +1,4 @@
+
 import asyncio
 import os
 import requests
@@ -21,12 +22,22 @@ if not CHAT_ID:
 
 def send_telegram(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-    response = requests.post(
-        url,
-        data={"chat_id": CHAT_ID, "text": message},
-        timeout=10
-    )
-    print("Telegram:", response.status_code)
+
+    try:
+        response = requests.post(
+            url,
+            data={
+                "chat_id": CHAT_ID,
+                "text": message
+            },
+            timeout=10
+        )
+
+        print("Telegram status:", response.status_code)
+        print("Telegram response:", response.text)
+
+    except Exception as e:
+        print("Telegram error:", e)
 
 
 def calculate_signal(closes):
@@ -39,6 +50,7 @@ def calculate_signal(closes):
     ema20 = series.ewm(span=20, adjust=False).mean().iloc[-1]
 
     delta = series.diff()
+
     gains = delta.clip(lower=0)
     losses = -delta.clip(upper=0)
 
@@ -62,54 +74,83 @@ def calculate_signal(closes):
 
 
 async def main():
-    print("Pocket Option Telegram Signal Bot")
-    print("Market: EURUSD OTC")
-    print("Timeframe: M1")
-    print("Connecting...")
+
+    print("================================")
+    print("POCKET OPTION TELEGRAM BOT")
+    print("EURUSD OTC - M1")
+    print("================================")
 
     client = PocketOptionAsync(ssid=SSID)
 
-    print("Connected!")
+    print("Connected to Pocket Option")
 
     send_telegram(
-        "🤖 Pocket Option OTC Signal Bot is ONLINE\n"
-        "EUR/USD OTC • M1\n"
-        "EMA 9/20 + RSI 14\n"
-        "Waiting for confirmation..."
+        "🤖 POCKET OPTION BOT ONLINE\n\n"
+        "EUR/USD OTC\n"
+        "M1\n"
+        "EMA 9/20 + RSI 14\n\n"
+        "Waiting for signal..."
     )
 
     closes = []
-    last_signal = None
 
     async for candle in client.subscribe_symbol("EURUSD_otc"):
 
         try:
-            close = float(candle["close"])
-        except (KeyError, TypeError, ValueError):
-            print("Could not read candle:", candle)
-            continue
 
-        closes.append(close)
+            if isinstance(candle, dict):
+                close = candle.get("close")
+            else:
+                close = candle.close
 
-        if len(closes) > 100:
-            closes.pop(0)
+            close = float(close)
 
-        signal = calculate_signal(closes)
+            closes.append(close)
 
-        print("Close:", close, "Signal:", signal)
+            if len(closes) > 100:
+                closes.pop(0)
 
-        if signal in ("BUY", "SELL") and signal != last_signal:
-            message = (
-                f"🚨 POCKET OPTION SIGNAL\n\n"
-                f"EUR/USD OTC\n"
-                f"TIMEFRAME: M1\n\n"
-                f"➡️ {signal}\n\n"
-                f"EMA 9/20 + RSI 14 confirmation\n"
-                f"Signal only — no automatic trade."
+            signal = calculate_signal(closes)
+
+            print(
+                "Candle:",
+                close,
+                "| Candles:",
+                len(closes),
+                "| Signal:",
+                signal
             )
 
-            send_telegram(message)
-            last_signal = signal
+            if signal == "BUY":
+
+                message = (
+                    "🟢 POCKET OPTION SIGNAL\n\n"
+                    "EUR/USD OTC\n"
+                    "TIMEFRAME: M1\n\n"
+                    "➡️ BUY\n\n"
+                    "EMA 9 > EMA 20\n"
+                    "RSI ≥ 55\n\n"
+                    "⚠️ Signal only — no automatic trade."
+                )
+
+                send_telegram(message)
+
+            elif signal == "SELL":
+
+                message = (
+                    "🔴 POCKET OPTION SIGNAL\n\n"
+                    "EUR/USD OTC\n"
+                    "TIMEFRAME: M1\n\n"
+                    "➡️ SELL\n\n"
+                    "EMA 9 < EMA 20\n"
+                    "RSI ≤ 45\n\n"
+                    "⚠️ Signal only — no automatic trade."
+                )
+
+                send_telegram(message)
+
+        except Exception as e:
+            print("Candle processing error:", e)
 
 
 if __name__ == "__main__":
