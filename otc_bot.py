@@ -1,34 +1,37 @@
+
 import asyncio
 import os
 
-from pocket_option import PocketOptionClient
-from pocket_option.constants import Regions
-from pocket_option.models import Asset
+from BinaryOptionsToolsV2.pocketoption import PocketOptionAsync
 
-SSID = os.environ.get("POCKET_OPTION_SSID")
+SSID = os.environ.get("PO_SESSION")
 
 if not SSID:
-    print("ERROR: POCKET_OPTION_SSID is not set")
+    print("ERROR: PO_SESSION is not set")
     raise SystemExit(1)
-
-client = PocketOptionClient(logger=True)
 
 
 async def main():
     print("Pocket Option OTC Signal Bot")
-    print("Connecting...")
-
-    await client.connect(Regions.DEMO)
-
-    print("Connected!")
+    print("============================")
     print("Market: EURUSD OTC")
     print("Timeframe: M1")
-    print("Waiting for OTC candles...")
+    print("Connecting to Pocket Option...")
 
-    await client.emit.subscribe_symbol(Asset.EURUSD_otc)
+    client = PocketOptionAsync(ssid=SSID)
 
-    while True:
-        await asyncio.sleep(60)
+    print("Connected!")
+    print("Waiting for real OTC candles...")
+
+    async for candle in client.subscribe_symbol("EURUSD_otc"):
+        print("REAL OTC CANDLE:")
+        print(f"Time:   {candle.get('time')}")
+        print(f"Open:   {candle.get('open')}")
+        print(f"High:   {candle.get('high')}")
+        print(f"Low:    {candle.get('low')}")
+        print(f"Close:  {candle.get('close')}")
+        print("----------------------------")
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())
