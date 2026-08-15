@@ -1,6 +1,9 @@
-import os
 import asyncio
+import os
 
+from pocket_option import PocketOptionClient
+from pocket_option.constants import Regions
+from pocket_option.models import Asset
 
 SSID = os.environ.get("POCKET_OPTION_SSID")
 
@@ -8,31 +11,24 @@ if not SSID:
     print("ERROR: POCKET_OPTION_SSID is not set")
     raise SystemExit(1)
 
-api = PocketOption(SSID)
+client = PocketOptionClient(logger=True)
+
 
 async def main():
     print("Pocket Option OTC Signal Bot")
     print("Connecting...")
 
-    await api.connect()
+    await client.connect(Regions.DEMO)
 
     print("Connected!")
     print("Market: EURUSD OTC")
     print("Timeframe: M1")
     print("Waiting for OTC candles...")
 
+    await client.emit.subscribe_symbol(Asset.EURUSD_otc)
+
     while True:
-        try:
-            candles = await api.get_candles("EURUSD_otc", 60, 20)
+        await asyncio.sleep(60)
 
-            if candles:
-                print("Received OTC candle data!")
-                print(candles[-1])
-
-            await asyncio.sleep(60)
-
-        except Exception as e:
-            print("Error:", e)
-            await asyncio.sleep(10)
 
 asyncio.run(main())
