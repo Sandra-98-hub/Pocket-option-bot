@@ -1,2 +1,4 @@
+
 BinaryOptionsToolsV2==0.2.13
 requests
+pandas
