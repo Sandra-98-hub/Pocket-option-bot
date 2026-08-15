@@ -1,1 +1,1 @@
-binaryoptionstoolsv2
+BinaryOptionsToolsV2==0.2.13
