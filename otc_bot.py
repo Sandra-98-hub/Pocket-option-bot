@@ -1,6 +1,6 @@
 import os
 import asyncio
-from pocketoptionapi.stable_api import PocketOption
+
 
 SSID = os.environ.get("POCKET_OPTION_SSID")
 
