@@ -4,7 +4,7 @@ import os
 
 from BinaryOptionsToolsV2.pocketoption import PocketOptionAsync
 
-SSID = os.environ.get("PO_SESSION")
+SSID = os.environ.get("PO_SSID")
 
 if not SSID:
     print("ERROR: PO_SESSION is not set")
