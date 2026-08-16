@@ -43,7 +43,10 @@ console.log("====================================");
 console.log("Market:", SYMBOL);
 console.log("Timeframe:", INTERVAL);
 console.log("Strategy: EMA 9 + EMA 21 + RSI 14");
-console.log("Minimum confidence:", MIN_CONFIDENCE + "%");
+console.log(
+  "Minimum confidence:",
+  MIN_CONFIDENCE + "%"
+);
 
 console.log(
   "Telegram:",
@@ -270,7 +273,6 @@ function sendTelegramMessage(message) {
     );
 
     return;
-
   }
 
   const data =
@@ -347,12 +349,11 @@ function sendTelegramMessage(message) {
   );
 
   request.write(data);
-
   request.end();
 }
 
 // ==========================================
-// CONFIDENCE CALCULATION
+// SIGNAL CALCULATION
 // ==========================================
 
 function calculateSignal(
@@ -390,7 +391,9 @@ function calculateSignal(
       confidence: 0,
       ema9,
       ema21,
-      rsi
+      rsi,
+      buyScore: 0,
+      sellScore: 0
     };
 
   }
@@ -586,7 +589,7 @@ async function checkMarket() {
       candleTime;
 
     // ======================================
-    // CALCULATE SIGNAL
+    // CALCULATE
     // ======================================
 
     const result =
@@ -667,12 +670,11 @@ async function checkMarket() {
     }
 
     // ======================================
-    // PREVENT REPEATED SIGNAL
+    // PREVENT DUPLICATES
     // ======================================
 
     if (
-      signal ===
-      lastSentSignal
+      signal === lastSentSignal
     ) {
 
       console.log(
@@ -686,13 +688,15 @@ async function checkMarket() {
       signal;
 
     // ======================================
-    // EXPIRY
+    // CORRECT ARUBA TIME
     // ======================================
 
     const signalDate =
       new Date(
-        candleTime.replace(" ", "T") +
-        "-04:00"
+        candleTime.replace(
+          " ",
+          "T"
+        ) + "-04:00"
       );
 
     const expiryDate =
@@ -702,9 +706,22 @@ async function checkMarket() {
       );
 
     const expiryTime =
-      expiryDate
-        .toISOString()
-        .substring(11, 16);
+      expiryDate.toLocaleTimeString(
+        "en-US",
+        {
+          timeZone:
+            "America/Aruba",
+
+          hour:
+            "2-digit",
+
+          minute:
+            "2-digit",
+
+          hour12:
+            false
+        }
+      );
 
     // ======================================
     // TELEGRAM MESSAGE
@@ -715,7 +732,7 @@ async function checkMarket() {
 
       `📊 Signal: ${signal}\n` +
 
-      `🎯 Confidence filter: ${confidence}%\n\n` +
+      `🎯 Filter score: ${confidence}%\n\n` +
 
       `💰 Entry: ${price.toFixed(5)}\n` +
 
@@ -735,8 +752,7 @@ async function checkMarket() {
 
       "⚠️ Not Pocket Option OTC data\n\n" +
 
-      "This is a filtered signal, " +
-      "not a guaranteed win.";
+      "Filtered signal — not a guaranteed win.";
 
     console.log(
       "Sending signal to Telegram..."
@@ -757,8 +773,12 @@ async function checkMarket() {
 }
 
 // ==========================================
-// START
+// START BOT
 // ==========================================
+
+console.log(
+  "Starting live market monitoring..."
+);
 
 checkMarket();
 
