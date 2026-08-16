@@ -4,76 +4,54 @@ import asyncio
 from BinaryOptionsToolsV2.pocketoption import PocketOptionAsync
 
 
-SSID = os.environ.get("POCKET_OPTION_SSID")
-
-SYMBOL = "EURUSD_otc"
-
-
 async def main():
 
+    ssid = os.environ.get("POCKET_OPTION_SSID")
+
     print("================================")
-    print("POCKET OPTION OTC TEST")
+    print("POCKET OPTION OTC CONNECTION")
     print("================================")
 
-    if not SSID:
+    if not ssid:
         print("ERROR: POCKET_OPTION_SSID is missing")
         return
 
-    print("SSID: FOUND")
-    print("Market:", SYMBOL)
-    print("Timeframe: M1")
-    print("Connecting to Pocket Option...")
+    print("SSID found.")
+    print("Connecting...")
 
     try:
 
         client = PocketOptionAsync(
-            ssid=SSID
+            ssid=ssid
         )
 
-        print("Connected.")
-        print("Waiting for OTC candles...")
+        print("Connected successfully.")
 
-        async for candle in client.subscribe_symbol(
-            SYMBOL
-        ):
+        print("Getting EURUSD OTC candles...")
 
-            print("--------------------------------")
-
-            print(
-                "Candle time:",
-                candle.get("time")
-            )
-
-            print(
-                "Open:",
-                candle.get("open")
-            )
-
-            print(
-                "High:",
-                candle.get("high")
-            )
-
-            print(
-                "Low:",
-                candle.get("low")
-            )
-
-            print(
-                "Close:",
-                candle.get("close")
-            )
-
-            print("REAL-TIME OTC DATA RECEIVED")
-
-    except Exception as error:
-
-        print(
-            "OTC connection error:",
-            str(error)
+        candles = await client.get_candles(
+            "EURUSD_otc",
+            60,
+            0
         )
+
+        print("Candles received:", len(candles))
+
+        if candles:
+
+            print("Latest OTC candle:")
+            print(candles[-1])
+
+        print("================================")
+        print("POCKET OPTION OTC DATA WORKING")
+        print("================================")
+
+    except Exception as e:
+
+        print("OTC CONNECTION ERROR:")
+        print(type(e).__name__)
+        print(str(e))
 
 
 if __name__ == "__main__":
-
     asyncio.run(main())
