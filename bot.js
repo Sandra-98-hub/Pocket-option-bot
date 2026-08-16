@@ -1,9 +1,9 @@
 const https = require("https");
 const http = require("http");
 
-// ================================
+// ==========================================
 // ENVIRONMENT VARIABLES
-// ================================
+// ==========================================
 
 const TELEGRAM_BOT_TOKEN =
   process.env.TELEGRAM_BOT_TOKEN;
@@ -14,28 +14,36 @@ const TELEGRAM_CHAT_ID =
 const TWELVE_DATA_API_KEY =
   process.env.TWELVE_DATA_API_KEY;
 
-// ================================
+// ==========================================
 // SETTINGS
-// ================================
+// ==========================================
 
 const SYMBOL = "EUR/USD";
 const INTERVAL = "1min";
+
 const CHECK_EVERY = 60000;
+
+const EMA_FAST = 9;
+const EMA_SLOW = 21;
+const RSI_PERIOD = 14;
+
+const MIN_CONFIDENCE = 75;
 
 let lastCandleTime = null;
 let lastSentSignal = null;
 
-// ================================
+// ==========================================
 // STARTUP
-// ================================
+// ==========================================
 
-console.log("================================");
-console.log("Pocket Option Signal Bot");
-console.log("================================");
+console.log("====================================");
+console.log("LIVE EUR/USD SIGNAL BOT");
+console.log("====================================");
+
 console.log("Market:", SYMBOL);
-console.log("Timeframe: M1");
-console.log("Strategy: EMA + RSI");
-console.log("Status: ACTIVE");
+console.log("Timeframe:", INTERVAL);
+console.log("Strategy: EMA 9 + EMA 21 + RSI 14");
+console.log("Minimum confidence:", MIN_CONFIDENCE + "%");
 
 console.log(
   "Telegram:",
@@ -51,11 +59,12 @@ console.log(
     : "MISSING"
 );
 
-// ================================
+// ==========================================
 // EMA
-// ================================
+// ==========================================
 
 function calculateEMA(prices, period) {
+
   if (prices.length < period) {
     return null;
   }
@@ -66,22 +75,25 @@ function calculateEMA(prices, period) {
   let ema = prices[0];
 
   for (let i = 1; i < prices.length; i++) {
+
     ema =
       ((prices[i] - ema) * multiplier) +
       ema;
+
   }
 
   return ema;
 }
 
-// ================================
+// ==========================================
 // RSI
-// ================================
+// ==========================================
 
 function calculateRSI(
   prices,
   period = 14
 ) {
+
   if (prices.length <= period) {
     return null;
   }
@@ -94,6 +106,7 @@ function calculateRSI(
     i < prices.length;
     i++
   ) {
+
     const change =
       prices[i] - prices[i - 1];
 
@@ -104,6 +117,7 @@ function calculateRSI(
     if (change < 0) {
       losses += Math.abs(change);
     }
+
   }
 
   if (losses === 0) {
@@ -117,9 +131,9 @@ function calculateRSI(
     (100 / (1 + rs));
 }
 
-// ================================
-// GET TWELVE DATA
-// ================================
+// ==========================================
+// TWELVE DATA
+// ==========================================
 
 function getMarketData() {
 
@@ -127,11 +141,13 @@ function getMarketData() {
     (resolve, reject) => {
 
       if (!TWELVE_DATA_API_KEY) {
+
         reject(
           new Error(
             "TWELVE_DATA_API_KEY is missing"
           )
         );
+
         return;
       }
 
@@ -148,15 +164,17 @@ function getMarketData() {
           TWELVE_DATA_API_KEY
         );
 
-      const options = {
-        hostname: "api.twelvedata.com",
-        path: path,
-        method: "GET"
-      };
-
       const request =
         https.request(
-          options,
+          {
+            hostname:
+              "api.twelvedata.com",
+
+            path: path,
+
+            method: "GET"
+          },
+
           (response) => {
 
             let data = "";
@@ -180,12 +198,14 @@ function getMarketData() {
                   if (
                     json.status === "error"
                   ) {
+
                     reject(
                       new Error(
                         json.message ||
                         "Twelve Data error"
                       )
                     );
+
                     return;
                   }
 
@@ -195,11 +215,13 @@ function getMarketData() {
                       json.values
                     )
                   ) {
+
                     reject(
                       new Error(
                         "No market data received"
                       )
                     );
+
                     return;
                   }
 
@@ -232,52 +254,55 @@ function getMarketData() {
   );
 }
 
-// ================================
+// ==========================================
 // TELEGRAM
-// ================================
+// ==========================================
 
-function sendTelegramMessage(
-  message
-) {
+function sendTelegramMessage(message) {
 
   if (
     !TELEGRAM_BOT_TOKEN ||
     !TELEGRAM_CHAT_ID
   ) {
+
     console.log(
       "Telegram credentials are missing."
     );
+
     return;
+
   }
 
   const data =
     JSON.stringify({
       chat_id:
         TELEGRAM_CHAT_ID,
-      text: message
+
+      text:
+        message
     });
-
-  const options = {
-    hostname:
-      "api.telegram.org",
-
-    path:
-      `/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
-
-    method: "POST",
-
-    headers: {
-      "Content-Type":
-        "application/json",
-
-      "Content-Length":
-        Buffer.byteLength(data)
-    }
-  };
 
   const request =
     https.request(
-      options,
+      {
+        hostname:
+          "api.telegram.org",
+
+        path:
+          `/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
+
+        method:
+          "POST",
+
+        headers: {
+          "Content-Type":
+            "application/json",
+
+          "Content-Length":
+            Buffer.byteLength(data)
+        }
+      },
+
       (response) => {
 
         let body = "";
@@ -322,18 +347,184 @@ function sendTelegramMessage(
   );
 
   request.write(data);
+
   request.end();
 }
 
-// ================================
-// ANALYZE MARKET
-// ================================
+// ==========================================
+// CONFIDENCE CALCULATION
+// ==========================================
+
+function calculateSignal(
+  prices,
+  latest,
+  previous
+) {
+
+  const ema9 =
+    calculateEMA(
+      prices,
+      EMA_FAST
+    );
+
+  const ema21 =
+    calculateEMA(
+      prices,
+      EMA_SLOW
+    );
+
+  const rsi =
+    calculateRSI(
+      prices,
+      RSI_PERIOD
+    );
+
+  if (
+    ema9 === null ||
+    ema21 === null ||
+    rsi === null
+  ) {
+
+    return {
+      signal: "NO TRADE",
+      confidence: 0,
+      ema9,
+      ema21,
+      rsi
+    };
+
+  }
+
+  const price =
+    Number(latest.close);
+
+  const previousClose =
+    Number(previous.close);
+
+  const candleOpen =
+    Number(latest.open);
+
+  const candleClose =
+    Number(latest.close);
+
+  const bullishCandle =
+    candleClose > candleOpen;
+
+  const bearishCandle =
+    candleClose < candleOpen;
+
+  // ========================================
+  // BUY SCORE
+  // ========================================
+
+  let buyScore = 0;
+
+  if (ema9 > ema21) {
+    buyScore += 25;
+  }
+
+  if (price > ema9) {
+    buyScore += 20;
+  }
+
+  if (price > ema21) {
+    buyScore += 15;
+  }
+
+  if (
+    rsi >= 55 &&
+    rsi <= 70
+  ) {
+    buyScore += 20;
+  }
+
+  if (bullishCandle) {
+    buyScore += 10;
+  }
+
+  if (price > previousClose) {
+    buyScore += 10;
+  }
+
+  // ========================================
+  // SELL SCORE
+  // ========================================
+
+  let sellScore = 0;
+
+  if (ema9 < ema21) {
+    sellScore += 25;
+  }
+
+  if (price < ema9) {
+    sellScore += 20;
+  }
+
+  if (price < ema21) {
+    sellScore += 15;
+  }
+
+  if (
+    rsi <= 45 &&
+    rsi >= 30
+  ) {
+    sellScore += 20;
+  }
+
+  if (bearishCandle) {
+    sellScore += 10;
+  }
+
+  if (price < previousClose) {
+    sellScore += 10;
+  }
+
+  // ========================================
+  // FINAL SIGNAL
+  // ========================================
+
+  let signal = "NO TRADE";
+  let confidence = 0;
+
+  if (
+    buyScore >= MIN_CONFIDENCE &&
+    buyScore > sellScore
+  ) {
+
+    signal = "BUY";
+    confidence = buyScore;
+
+  } else if (
+    sellScore >= MIN_CONFIDENCE &&
+    sellScore > buyScore
+  ) {
+
+    signal = "SELL";
+    confidence = sellScore;
+
+  }
+
+  return {
+    signal,
+    confidence,
+    ema9,
+    ema21,
+    rsi,
+    buyScore,
+    sellScore
+  };
+}
+
+// ==========================================
+// MARKET CHECK
+// ==========================================
 
 async function checkMarket() {
 
-  console.log("--------------------------------");
+  console.log("------------------------------------");
+
   console.log(
-    "Checking live EUR/USD M1 data..."
+    "Checking live EUR/USD M1..."
   );
 
   try {
@@ -341,8 +532,6 @@ async function checkMarket() {
     const candles =
       await getMarketData();
 
-    // Twelve Data returns newest first,
-    // so reverse into oldest -> newest.
     const ordered =
       [...candles].reverse();
 
@@ -352,7 +541,7 @@ async function checkMarket() {
           Number(candle.close)
       );
 
-    if (prices.length < 20) {
+    if (prices.length < 30) {
 
       console.log(
         "Not enough candles."
@@ -366,47 +555,24 @@ async function checkMarket() {
         ordered.length - 1
       ];
 
+    const previous =
+      ordered[
+        ordered.length - 2
+      ];
+
     const candleTime =
       latest.datetime;
 
     const price =
       Number(latest.close);
 
-    const ema =
-      calculateEMA(
-        prices,
-        9
-      );
+    // ======================================
+    // SAME CANDLE PROTECTION
+    // ======================================
 
-    const rsi =
-      calculateRSI(
-        prices,
-        14
-      );
-
-    console.log(
-      "Candle time:",
-      candleTime
-    );
-
-    console.log(
-      "Price:",
-      price
-    );
-
-    console.log(
-      "EMA:",
-      ema.toFixed(5)
-    );
-
-    console.log(
-      "RSI:",
-      rsi.toFixed(2)
-    );
-
-    // Don't process the same candle repeatedly.
     if (
-      candleTime === lastCandleTime
+      candleTime ===
+      lastCandleTime
     ) {
 
       console.log(
@@ -419,47 +585,94 @@ async function checkMarket() {
     lastCandleTime =
       candleTime;
 
-    let signal =
-      "NO TRADE";
+    // ======================================
+    // CALCULATE SIGNAL
+    // ======================================
 
-    if (
-      price > ema &&
-      rsi >= 55
-    ) {
+    const result =
+      calculateSignal(
+        prices,
+        latest,
+        previous
+      );
 
-      signal = "BUY";
+    const {
+      signal,
+      confidence,
+      ema9,
+      ema21,
+      rsi,
+      buyScore,
+      sellScore
+    } = result;
 
-    } else if (
-      price < ema &&
-      rsi <= 45
-    ) {
+    console.log(
+      "Candle:",
+      candleTime
+    );
 
-      signal = "SELL";
+    console.log(
+      "Price:",
+      price.toFixed(5)
+    );
 
-    }
+    console.log(
+      "EMA 9:",
+      ema9.toFixed(5)
+    );
+
+    console.log(
+      "EMA 21:",
+      ema21.toFixed(5)
+    );
+
+    console.log(
+      "RSI:",
+      rsi.toFixed(2)
+    );
+
+    console.log(
+      "BUY score:",
+      buyScore
+    );
+
+    console.log(
+      "SELL score:",
+      sellScore
+    );
 
     console.log(
       "Signal:",
       signal
     );
 
-    // Only send BUY/SELL.
+    console.log(
+      "Confidence:",
+      confidence + "%"
+    );
+
+    // ======================================
+    // NO TRADE
+    // ======================================
+
     if (
-      signal !== "BUY" &&
-      signal !== "SELL"
+      signal === "NO TRADE"
     ) {
 
       console.log(
-        "No trade signal."
+        "Conditions not strong enough."
       );
 
       return;
     }
 
-    // Don't repeatedly send
-    // the same direction.
+    // ======================================
+    // PREVENT REPEATED SIGNAL
+    // ======================================
+
     if (
-      signal === lastSentSignal
+      signal ===
+      lastSentSignal
     ) {
 
       console.log(
@@ -472,24 +685,58 @@ async function checkMarket() {
     lastSentSignal =
       signal;
 
+    // ======================================
+    // EXPIRY
+    // ======================================
+
+    const signalDate =
+      new Date(
+        candleTime.replace(" ", "T") +
+        "-04:00"
+      );
+
+    const expiryDate =
+      new Date(
+        signalDate.getTime() +
+        60000
+      );
+
+    const expiryTime =
+      expiryDate
+        .toISOString()
+        .substring(11, 16);
+
+    // ======================================
+    // TELEGRAM MESSAGE
+    // ======================================
+
     const message =
       "🚨 LIVE EUR/USD SIGNAL 🚨\n\n" +
 
-      `Signal: ${signal}\n` +
+      `📊 Signal: ${signal}\n` +
 
-      `Time: ${candleTime}\n` +
+      `🎯 Confidence filter: ${confidence}%\n\n` +
 
-      `Price: ${price.toFixed(5)}\n` +
+      `💰 Entry: ${price.toFixed(5)}\n` +
 
-      `EMA(9): ${ema.toFixed(5)}\n` +
+      `⏰ Signal time: ${candleTime}\n` +
 
-      `RSI(14): ${rsi.toFixed(2)}\n\n` +
+      `⏳ 1M expiry: ${expiryTime}\n\n` +
+
+      `EMA 9: ${ema9.toFixed(5)}\n` +
+
+      `EMA 21: ${ema21.toFixed(5)}\n` +
+
+      `RSI 14: ${rsi.toFixed(2)}\n\n` +
 
       "Timeframe: M1\n" +
 
       "Source: Twelve Data\n" +
 
-      "⚠️ Not Pocket Option OTC data";
+      "⚠️ Not Pocket Option OTC data\n\n" +
+
+      "This is a filtered signal, " +
+      "not a guaranteed win.";
 
     console.log(
       "Sending signal to Telegram..."
@@ -509,9 +756,9 @@ async function checkMarket() {
   }
 }
 
-// ================================
-// RUN BOT
-// ================================
+// ==========================================
+// START
+// ==========================================
 
 checkMarket();
 
@@ -520,9 +767,9 @@ setInterval(
   CHECK_EVERY
 );
 
-// ================================
+// ==========================================
 // RENDER SERVER
-// ================================
+// ==========================================
 
 const PORT =
   process.env.PORT || 10000;
