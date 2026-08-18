@@ -17,9 +17,13 @@ from pocket_option.models import (
 # ============================================================
 
 MARKETS = [
-    Asset.AUDCAD_otc,
-    Asset.AEDCNY_otc,
-    Asset.AUDNZD_otc,
+    "EURUSD_otc",
+    "EURCHF_otc",
+    "GBPUSD_otc",
+    "USDJPY_otc",
+    "AUDCAD_otc",
+    "AUDNZD_otc",
+    "AEDCNY_otc",
 ]
 
 IS_DEMO = 1
