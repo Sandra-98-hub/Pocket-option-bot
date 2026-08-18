@@ -1,93 +1,151 @@
 import os
 import asyncio
-import logging
+import urllib.request
+import urllib.parse
 
-from pocket_option import PocketOptionClient
-from pocket_option.constants import Regions
-from pocket_option.models import Asset
+from BinaryOptionsToolsV2.pocketoption import PocketOptionAsync
 
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s"
-)
-
-logger = logging.getLogger(__name__)
 
 MARKETS = [
-    Asset.AUDCAD_otc,
-    Asset.AEDCNY_otc,
-    Asset.AUDNZD_otc,
+    "AUDCAD_otc",
+    "AEDCNY_otc",
+    "AUDNZD_otc",
 ]
+
+SSID = os.getenv("POCKET_OPTION_SSID")
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
+
+def telegram(message):
+
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+        print("Telegram credentials missing")
+        return
+
+    url = (
+        f"https://api.telegram.org/"
+        f"bot{TELEGRAM_TOKEN}/sendMessage"
+    )
+
+    data = urllib.parse.urlencode({
+        "chat_id": TELEGRAM_CHAT_ID,
+        "text": message
+    }).encode()
+
+    try:
+        request = urllib.request.Request(
+            url,
+            data=data,
+            method="POST"
+        )
+
+        with urllib.request.urlopen(
+            request,
+            timeout=15
+        ) as response:
+
+            print(
+                "Telegram status:",
+                response.status
+            )
+
+    except Exception as error:
+
+        print("Telegram error:", error)
 
 
 async def main():
 
-    print("======================================")
-    print("POCKET OPTION OTC CONNECTION TEST")
-    print("======================================")
+    print("====================================")
+    print("POCKET OPTION OTC BOT")
+    print("====================================")
 
-    session = os.getenv("POCKET_OPTION_SESSION")
-    uid = os.getenv("POCKET_OPTION_UID")
-
-    if not session:
-        print("❌ POCKET_OPTION_SESSION is missing")
+    if not SSID:
+        print("ERROR: POCKET_OPTION_SSID missing")
         return
 
-    if not uid:
-        print("❌ POCKET_OPTION_UID is missing")
-        return
-
-    print("Session: FOUND")
-    print("UID: FOUND")
+    print("SSID: FOUND")
     print("Connecting to Pocket Option...")
-
-    client = PocketOptionClient(logger=True)
 
     try:
 
-        await client.connect(
-            Regions.DEMO
-        )
+        async with PocketOptionAsync(SSID) as api:
 
-        print("✅ Connected to Pocket Option")
+            print("CONNECTED TO POCKET OPTION")
+            print("")
 
-        print("")
-        print("Testing OTC markets:")
+            telegram(
+                "✅ Pocket Option OTC bot connected.\n"
+                "Testing OTC markets:\n\n"
+                "AUD/CAD OTC\n"
+                "AED/CNY OTC\n"
+                "AUD/NZD OTC"
+            )
 
-        for market in MARKETS:
+            for market in MARKETS:
+
+                print("--------------------------------")
+                print("Testing:", market)
+
+                try:
+
+                    candles = await api.get_candles(
+                        market,
+                        60,
+                        30
+                    )
+
+                    if candles:
+
+                        print(
+                            "✅ OTC candles received:",
+                            market
+                        )
+
+                        print(
+                            "Latest candle:",
+                            candles[-1]
+                        )
+
+                        telegram(
+                            f"✅ OTC DATA RECEIVED\n\n"
+                            f"Market: {market}\n"
+                            f"Timeframe: M1\n"
+                            f"Source: Pocket Option OTC"
+                        )
+
+                    else:
+
+                        print(
+                            "❌ No candles:",
+                            market
+                        )
+
+                except Exception as error:
+
+                    print(
+                        "❌ Market error:",
+                        market
+                    )
+
+                    print(
+                        type(error).__name__,
+                        str(error)
+                    )
 
             print("")
-            print(f"Testing {market}...")
+            print("OTC TEST COMPLETE")
 
-            try:
-
-                await client.emit.subscribe_to_asset(
-                    market
-                )
-
-                print(
-                    f"✅ Subscription requested: {market}"
-                )
-
-            except Exception as error:
-
-                print(
-                    f"❌ {market}: {error}"
-                )
-
-        print("")
-        print("======================================")
-        print("OTC CONNECTION TEST RUNNING")
-        print("======================================")
-
-        while True:
-            await asyncio.sleep(10)
+            while True:
+                await asyncio.sleep(60)
 
     except Exception as error:
 
         print("")
-        print("❌ POCKET OPTION ERROR")
+        print("====================================")
+        print("POCKET OPTION CONNECTION ERROR")
+        print("====================================")
         print(type(error).__name__)
         print(str(error))
 
