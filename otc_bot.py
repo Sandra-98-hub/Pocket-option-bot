@@ -5,8 +5,7 @@ import os
 from pocket_option import PocketOptionClient
 from pocket_option.constants import Regions
 from pocket_option.contrib.candles import MemoryCandleStorage
-from pocket_option.models import (
-    Asset,
+
     AuthorizationData,
     SuccessAuthEvent,
 )
