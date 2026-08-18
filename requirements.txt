@@ -1,1 +1,1 @@
-pocket-option==0.2.8
+BinaryOptionsToolsV2==0.2.13
