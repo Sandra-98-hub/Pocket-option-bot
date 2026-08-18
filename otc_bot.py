@@ -1,153 +1,96 @@
-
 import os
 import asyncio
+import logging
 
-from BinaryOptionsToolsV2.pocketoption import PocketOptionAsync
+from pocket_option import PocketOptionClient
+from pocket_option.constants import Regions
+from pocket_option.models import Asset
 
 
-# ==========================================
-# POCKET OPTION OTC MARKETS
-# ==========================================
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)s | %(message)s"
+)
 
-OTC_MARKETS = [
-    "AUDCAD_otc",
-    "AEDCNY_otc",
-    "AUDNZD_otc",
+logger = logging.getLogger(__name__)
+
+MARKETS = [
+    Asset.AUDCAD_otc,
+    Asset.AEDCNY_otc,
+    Asset.AUDNZD_otc,
 ]
-
-
-async def test_market(client, market):
-
-    print("------------------------------------------")
-    print(f"Testing: {market}")
-    print("Timeframe: M1")
-
-    try:
-
-        candles = await client.get_candles(
-            market,
-            60,
-            0
-        )
-
-        if candles:
-
-            print(f"✅ {market} OTC DATA RECEIVED")
-            print(f"Candles received: {len(candles)}")
-
-            latest = candles[-1]
-
-            print("Latest candle:")
-            print(latest)
-
-            return True
-
-        else:
-
-            print(f"❌ {market}: No candles received")
-            return False
-
-    except Exception as error:
-
-        print(f"❌ {market}: ERROR")
-        print(type(error).__name__)
-        print(str(error))
-
-        return False
 
 
 async def main():
 
-    print("")
-    print("==========================================")
-    print("POCKET OPTION OTC DATA TEST")
-    print("==========================================")
-    print("")
+    print("======================================")
+    print("POCKET OPTION OTC CONNECTION TEST")
+    print("======================================")
 
-    ssid = os.getenv("POCKET_OPTION_SSID")
+    session = os.getenv("POCKET_OPTION_SESSION")
+    uid = os.getenv("POCKET_OPTION_UID")
 
-    if not ssid:
-
-        print("❌ ERROR")
-        print("POCKET_OPTION_SSID is missing")
-
+    if not session:
+        print("❌ POCKET_OPTION_SESSION is missing")
         return
 
-    print("SSID: FOUND")
-    print("Markets to test:")
+    if not uid:
+        print("❌ POCKET_OPTION_UID is missing")
+        return
 
-    for market in OTC_MARKETS:
-        print(f"  - {market}")
-
-    print("")
+    print("Session: FOUND")
+    print("UID: FOUND")
     print("Connecting to Pocket Option...")
-    print("")
+
+    client = PocketOptionClient(logger=True)
 
     try:
 
-        client = PocketOptionAsync(
-            ssid=ssid
+        await client.connect(
+            Regions.DEMO
         )
 
-        print("Connection initialized.")
-        print("")
-
-        working_markets = []
-
-        for market in OTC_MARKETS:
-
-            result = await test_market(
-                client,
-                market
-            )
-
-            if result:
-                working_markets.append(market)
-
-            # Small pause between requests
-            await asyncio.sleep(1)
+        print("✅ Connected to Pocket Option")
 
         print("")
-        print("==========================================")
-        print("TEST COMPLETE")
-        print("==========================================")
+        print("Testing OTC markets:")
 
-        if working_markets:
+        for market in MARKETS:
 
             print("")
-            print("OTC MARKETS WITH DATA:")
+            print(f"Testing {market}...")
 
-            for market in working_markets:
-                print(f"✅ {market}")
+            try:
 
-            print("")
-            print(
-                "Next step: connect these candles "
-                "to the EMA/RSI signal engine."
-            )
+                await client.emit.subscribe_to_asset(
+                    market
+                )
 
-        else:
+                print(
+                    f"✅ Subscription requested: {market}"
+                )
 
-            print("")
-            print("❌ NO OTC MARKET DATA RECEIVED")
-            print("")
-            print(
-                "The Pocket Option connection "
-                "needs to be fixed before signals "
-                "are generated."
-            )
+            except Exception as error:
+
+                print(
+                    f"❌ {market}: {error}"
+                )
+
+        print("")
+        print("======================================")
+        print("OTC CONNECTION TEST RUNNING")
+        print("======================================")
+
+        while True:
+            await asyncio.sleep(10)
 
     except Exception as error:
 
         print("")
-        print("==========================================")
-        print("OTC CONNECTION ERROR")
-        print("==========================================")
-
+        print("❌ POCKET OPTION ERROR")
         print(type(error).__name__)
         print(str(error))
 
 
 if __name__ == "__main__":
-
     asyncio.run(main())
