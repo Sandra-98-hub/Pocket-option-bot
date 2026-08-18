@@ -4,15 +4,11 @@ import os
 
 from pocket_option import PocketOptionClient
 from pocket_option.constants import Regions
-from pocket_option.contrib.candles import MemoryCandleStorage
-
-    AuthorizationData,
-    SuccessAuthEvent,
-)
+from pocket_option.models import AuthorizationData, SuccessAuthEvent
 
 
 # ============================================================
-# SETTINGS
+# OTC MARKETS
 # ============================================================
 
 MARKETS = [
@@ -24,6 +20,11 @@ MARKETS = [
     "AUDNZD_otc",
     "AEDCNY_otc",
 ]
+
+
+# ============================================================
+# SETTINGS
+# ============================================================
 
 IS_DEMO = 1
 
@@ -46,33 +47,28 @@ logger = logging.getLogger(__name__)
 
 client = PocketOptionClient(logger=True)
 
-candles = MemoryCandleStorage(client)
-
-connected_event = asyncio.Event()
-authorized_event = asyncio.Event()
-
 
 # ============================================================
-# CONNECT
+# CONNECTION
 # ============================================================
 
 @client.on.connect
 async def on_connect(data=None):
 
     print("")
-    print("==========================================")
-    print("CONNECTED TO POCKET OPTION WEBSOCKET")
-    print("==========================================")
+    print("========================================")
+    print("POCKET OPTION CONNECTED")
+    print("========================================")
 
     session = os.getenv("PO_SESSION")
     uid = os.getenv("PO_UID")
 
     if not session:
-        print("❌ PO_SESSION is missing")
+        print("ERROR: PO_SESSION is missing")
         return
 
     if not uid:
-        print("❌ PO_UID is missing")
+        print("ERROR: PO_UID is missing")
         return
 
     print("PO_SESSION: FOUND")
@@ -93,67 +89,53 @@ async def on_connect(data=None):
 
         await client.emit.auth(auth_data)
 
-        connected_event.set()
-
         print("Authentication request sent.")
 
     except Exception as error:
 
         print("")
-        print("❌ AUTHENTICATION ERROR")
+        print("AUTHENTICATION ERROR")
         print(type(error).__name__)
         print(str(error))
 
 
 # ============================================================
-# AUTHORIZED
+# AUTH SUCCESS
 # ============================================================
 
 @client.on.success_auth
 async def on_success_auth(data: SuccessAuthEvent):
 
     print("")
-    print("==========================================")
-    print("✅ POCKET OPTION AUTHENTICATED")
-    print("==========================================")
+    print("========================================")
+    print("POCKET OPTION AUTHENTICATED")
+    print("========================================")
 
-    print("Account connection successful.")
+    print("")
+    print("Testing OTC markets:")
 
-    authorized_event.set()
-
-    # Load required account/market information.
-    try:
-        await client.emit.indicator_load()
-        await client.emit.favorite_load()
-        await client.emit.price_alert_load()
-    except Exception as error:
-        print(
-            "Market initialization warning:",
-            str(error)
-        )
-
-    # Subscribe to OTC markets.
     for market in MARKETS:
 
-        try:
+        print("")
+        print("----------------------------------------")
+        print("Market:", market)
 
-            print("")
-            print(
-                f"Subscribing to OTC: {market}"
-            )
+        try:
 
             await client.emit.subscribe_to_asset(
                 market
             )
 
             print(
-                f"✅ Subscription requested: {market}"
+                "Subscription requested:",
+                market
             )
 
         except Exception as error:
 
             print(
-                f"❌ Could not subscribe to {market}"
+                "Subscription error:",
+                market
             )
 
             print(
@@ -161,19 +143,21 @@ async def on_success_auth(data: SuccessAuthEvent):
                 str(error)
             )
 
+    print("")
+    print("========================================")
+    print("OTC TEST RUNNING")
+    print("========================================")
+
 
 # ============================================================
-# CANDLE EVENTS
+# CANDLE RECEIVED
 # ============================================================
 
 @client.on.candle_generated
 async def on_candle(candle):
 
     print("")
-    print("==========================================")
-    print("📊 OTC CANDLE RECEIVED")
-    print("==========================================")
-
+    print("OTC CANDLE RECEIVED")
     print(candle)
 
 
@@ -184,32 +168,30 @@ async def on_candle(candle):
 async def main():
 
     print("")
-    print("==========================================")
-    print("POCKET OPTION OTC TEST")
-    print("==========================================")
+    print("========================================")
+    print("POCKET OPTION OTC BOT")
+    print("========================================")
     print("")
 
     print("Markets:")
-    print("  AUD/CAD OTC")
-    print("  AED/CNY OTC")
-    print("  AUD/NZD OTC")
+
+    for market in MARKETS:
+        print("-", market)
 
     print("")
-    print("Checking environment variables...")
 
     if not os.getenv("PO_SESSION"):
-        print("❌ PO_SESSION is missing")
+        print("ERROR: PO_SESSION is missing")
         return
 
     if not os.getenv("PO_UID"):
-        print("❌ PO_UID is missing")
+        print("ERROR: PO_UID is missing")
         return
 
-    print("✅ PO_SESSION found")
-    print("✅ PO_UID found")
-
+    print("PO_SESSION found")
+    print("PO_UID found")
     print("")
-    print("Starting Pocket Option client...")
+    print("Connecting...")
 
     try:
 
@@ -217,23 +199,16 @@ async def main():
             Regions.DEMO
         )
 
-        print("Connection process started.")
-
-        # Keep service alive.
         while True:
 
             await asyncio.sleep(10)
 
-    except asyncio.CancelledError:
-
-        print("Bot stopped.")
-
     except Exception as error:
 
         print("")
-        print("==========================================")
-        print("❌ POCKET OPTION ERROR")
-        print("==========================================")
+        print("========================================")
+        print("POCKET OPTION ERROR")
+        print("========================================")
 
         print(
             type(error).__name__
@@ -250,8 +225,4 @@ async def main():
 
 if __name__ == "__main__":
 
-    try:
-        asyncio.run(main())
-
-    except KeyboardInterrupt:
-        print("Stopped.")
+    asyncio.run(main())
