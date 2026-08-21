@@ -1,8 +1,8 @@
 const axios = require("axios");
 
-// ================================
+// ========================================
 // SETTINGS
-// ================================
+// ========================================
 
 const TWELVE_DATA_API_KEY = process.env.TWELVE_DATA_API_KEY;
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -16,19 +16,15 @@ const SYMBOLS = [
   "AUD/USD",
   "USD/CAD",
   "NZD/USD",
-  "EUR/GBP",
-  "EUR/JPY",
-  "GBP/JPY",
-  "AUD/CAD",
-  "AUD/NZD"
+  "EUR/GBP"
 ];
 
 const INTERVAL = "1min";
 const OUTPUT_SIZE = 100;
 
-// ================================
-// CHECK SETTINGS
-// ================================
+// ========================================
+// CHECK ENVIRONMENT VARIABLES
+// ========================================
 
 if (!TWELVE_DATA_API_KEY) {
   console.error("ERROR: TWELVE_DATA_API_KEY is missing");
@@ -45,32 +41,38 @@ if (!TELEGRAM_CHAT_ID) {
   process.exit(1);
 }
 
-// ================================
+// ========================================
 // EMA
-// ================================
+// ========================================
 
 function calculateEMA(values, period) {
-  if (values.length < period) return null;
+  if (values.length < period) {
+    return null;
+  }
 
   const multiplier = 2 / (period + 1);
 
-  let ema = values
-    .slice(0, period)
-    .reduce((sum, value) => sum + value, 0) / period;
+  let ema =
+    values
+      .slice(0, period)
+      .reduce((sum, value) => sum + value, 0) / period;
 
   for (let i = period; i < values.length; i++) {
-    ema = (values[i] - ema) * multiplier + ema;
+    ema =
+      (values[i] - ema) * multiplier + ema;
   }
 
   return ema;
 }
 
-// ================================
+// ========================================
 // RSI
-// ================================
+// ========================================
 
 function calculateRSI(values, period = 14) {
-  if (values.length <= period) return null;
+  if (values.length <= period) {
+    return null;
+  }
 
   let gains = 0;
   let losses = 0;
@@ -101,23 +103,26 @@ function calculateRSI(values, period = 14) {
       (averageLoss * (period - 1) + loss) / period;
   }
 
-  if (averageLoss === 0) return 100;
+  if (averageLoss === 0) {
+    return 100;
+  }
 
   const rs = averageGain / averageLoss;
 
   return 100 - 100 / (1 + rs);
 }
 
-// ================================
-// GET MARKET DATA
-// ================================
+// ========================================
+// GET CANDLES
+// ========================================
 
 async function getCandles(symbol) {
-  const url = "https://api.twelvedata.com/time_series";
+  const url =
+    "https://api.twelvedata.com/time_series";
 
   const response = await axios.get(url, {
     params: {
-      symbol,
+      symbol: symbol,
       interval: INTERVAL,
       outputsize: OUTPUT_SIZE,
       apikey: TWELVE_DATA_API_KEY,
@@ -135,22 +140,30 @@ async function getCandles(symbol) {
     );
   }
 
-  // Twelve Data returns newest first.
+  // Twelve Data sends newest candle first.
+  // Reverse so calculations run oldest → newest.
   return response.data.values.reverse();
 }
 
-// ================================
+// ========================================
 // GENERATE SIGNAL
-// ================================
+// ========================================
 
 function generateSignal(candles) {
-  const closes = candles.map(c => Number(c.close));
+  const closes = candles.map(
+    candle => Number(candle.close)
+  );
 
   const price = closes[closes.length - 1];
 
-  const ema9 = calculateEMA(closes, 9);
-  const ema21 = calculateEMA(closes, 21);
-  const rsi = calculateRSI(closes, 14);
+  const ema9 =
+    calculateEMA(closes, 9);
+
+  const ema21 =
+    calculateEMA(closes, 21);
+
+  const rsi =
+    calculateRSI(closes, 14);
 
   if (
     ema9 === null ||
@@ -160,27 +173,28 @@ function generateSignal(candles) {
     return null;
   }
 
-  let signal = null;
-  let score = 0;
+  // -------------------------------
+  // BUY SCORE
+  // -------------------------------
 
-  // Bullish conditions
+  let buyScore = 0;
+
   if (ema9 > ema21) {
-    score += 40;
+    buyScore += 40;
   }
 
   if (rsi > 50) {
-    score += 30;
+    buyScore += 30;
   }
 
   if (price > ema9) {
-    score += 30;
+    buyScore += 30;
   }
 
-  if (score >= 80) {
-    signal = "BUY";
-  }
+  // -------------------------------
+  // SELL SCORE
+  // -------------------------------
 
-  // Bearish conditions
   let sellScore = 0;
 
   if (ema9 < ema21) {
@@ -195,7 +209,15 @@ function generateSignal(candles) {
     sellScore += 30;
   }
 
-  if (sellScore >= 80) {
+  let signal = null;
+  let score = 0;
+
+  if (buyScore >= 80) {
+    signal = "BUY";
+    score = buyScore;
+  }
+
+  if (sellScore >= 80 && sellScore > buyScore) {
     signal = "SELL";
     score = sellScore;
   }
@@ -204,8 +226,6 @@ function generateSignal(candles) {
     return null;
   }
 
-  const candleTime = candles[candles.length - 1].datetime;
-
   return {
     signal,
     score,
@@ -213,13 +233,14 @@ function generateSignal(candles) {
     ema9,
     ema21,
     rsi,
-    candleTime
+    candleTime:
+      candles[candles.length - 1].datetime
   };
 }
 
-// ================================
-// TELEGRAM
-// ================================
+// ========================================
+// SEND TELEGRAM
+// ========================================
 
 async function sendTelegram(message) {
   const url =
@@ -231,43 +252,57 @@ async function sendTelegram(message) {
   });
 }
 
-// ================================
-// FORMAT SIGNAL
-// ================================
+// ========================================
+// FORMAT TELEGRAM SIGNAL
+// ========================================
 
 function formatSignal(symbol, data) {
-  const price = Number(data.price).toFixed(5);
-  const ema9 = Number(data.ema9).toFixed(5);
-  const ema21 = Number(data.ema21).toFixed(5);
-  const rsi = Number(data.rsi).toFixed(2);
+  const price =
+    Number(data.price).toFixed(5);
 
-  const candleDate = new Date(
-    data.candleTime.replace(" ", "T") + "Z"
-  );
+  const ema9 =
+    Number(data.ema9).toFixed(5);
+
+  const ema21 =
+    Number(data.ema21).toFixed(5);
+
+  const rsi =
+    Number(data.rsi).toFixed(2);
+
+  const candleDate =
+    new Date(
+      data.candleTime.replace(" ", "T") + "Z"
+    );
 
   const signalTime =
-    candleDate.toISOString()
+    candleDate
+      .toISOString()
       .replace("T", " ")
       .substring(0, 19);
 
-  const expiryDate = new Date(
-    candleDate.getTime() + 60 * 1000
-  );
+  const expiryDate =
+    new Date(
+      candleDate.getTime() + 60 * 1000
+    );
 
   const expiry =
-    expiryDate.toISOString()
+    expiryDate
+      .toISOString()
       .replace("T", " ")
       .substring(0, 19);
 
-  return (
-`🚨 BINARY OPTIONS SIGNAL 🚨
+  return `🚨 BINARY OPTIONS SIGNAL 🚨
 
 📊 Pair: ${symbol}
+
 📈 Signal: ${data.signal}
+
 🎯 Filter score: ${data.score}%
 
 💰 Entry: ${price}
+
 ⏰ Signal candle: ${signalTime}
+
 ⏳ 1M expiry: ${expiry}
 
 EMA 9: ${ema9}
@@ -275,45 +310,53 @@ EMA 21: ${ema21}
 RSI 14: ${rsi}
 
 Timeframe: M1
+
 Source: Twelve Data
 
 ⚠️ Binary-options signal only.
-⚠️ Not Pocket Option OTC data.
-⚠️ No signal is guaranteed.`
-  );
+⚠️ NOT Pocket Option OTC data.
+⚠️ No signal is guaranteed.`;
 }
 
-// ================================
-// TRACK SENT SIGNALS
-// ================================
+// ========================================
+// PREVENT DUPLICATES
+// ========================================
 
 const lastSignals = {};
 
-// ================================
-// CHECK ONE PAIR
-// ================================
+// ========================================
+// CHECK ONE MARKET
+// ========================================
 
 async function checkSymbol(symbol) {
   try {
-    const candles = await getCandles(symbol);
+    const candles =
+      await getCandles(symbol);
 
-    const data = generateSignal(candles);
+    const data =
+      generateSignal(candles);
 
     if (!data) {
-      console.log(`${symbol}: No qualifying signal`);
+      console.log(
+        `${symbol}: No qualifying signal`
+      );
+
       return;
     }
 
     const signalKey =
       `${symbol}-${data.candleTime}-${data.signal}`;
 
-    if (lastSignals[symbol] === signalKey) {
+    if (
+      lastSignals[symbol] === signalKey
+    ) {
       return;
     }
 
     lastSignals[symbol] = signalKey;
 
-    const message = formatSignal(symbol, data);
+    const message =
+      formatSignal(symbol, data);
 
     console.log(message);
 
@@ -326,14 +369,15 @@ async function checkSymbol(symbol) {
   } catch (error) {
     console.error(
       `${symbol} ERROR:`,
-      error.response?.data || error.message
+      error.response?.data ||
+      error.message
     );
   }
 }
 
-// ================================
-// CHECK ALL PAIRS
-// ================================
+// ========================================
+// CHECK ALL MARKETS
+// ========================================
 
 async function checkAllMarkets() {
   console.log(
@@ -345,9 +389,9 @@ async function checkAllMarkets() {
   }
 }
 
-// ================================
-// START
-// ================================
+// ========================================
+// START BOT
+// ========================================
 
 console.log("================================");
 console.log("BINARY OPTIONS SIGNAL BOT");
@@ -365,6 +409,7 @@ console.log("================================");
 
 checkAllMarkets();
 
+// Check every minute
 setInterval(
   checkAllMarkets,
   60 * 1000
