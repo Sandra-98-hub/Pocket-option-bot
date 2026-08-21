@@ -1,21 +1,59 @@
-import inspect
-from pocket_option import PocketOptionClient, AuthorizationData
+import os
+import asyncio
 
-print("POCKET OPTION PACKAGE OK")
+from pocket_option import PocketOptionClient
+from pocket_option import AuthorizationData
+from pocket_option import IsDemo
 
-print("AUTHORIZATION DATA:")
-print(AuthorizationData)
+PO_URL = "wss://api.pocketoption.com/socket.io/"
 
-print("\nAUTHORIZATION SIGNATURE:")
-try:
-    print(inspect.signature(AuthorizationData))
-except Exception as e:
-    print("Could not read signature:", e)
+session = os.getenv("PO_SESSION")
 
-print("\nAUTHORIZATION FIELDS:")
-try:
-    print(AuthorizationData.model_fields)
-except Exception as e:
-    print("Could not read fields:", e)
+if not session:
+    print("ERROR: PO_SESSION is missing")
+    raise SystemExit(1)
 
-print("\nDONE")
+print("PO_SESSION found")
+
+async def main():
+
+    print("Creating authorization...")
+
+    auth = AuthorizationData(
+        session=session,
+        isDemo=IsDemo.DEMO,
+        uid=0,
+        platform=1,
+        isFastHistory=True,
+        isOptimized=True
+    )
+
+    print("Authorization created")
+    print("Connecting to Pocket Option...")
+
+    client = PocketOptionClient()
+
+    try:
+        await client.connect(
+            PO_URL,
+            auth=auth,
+            wait=True,
+            wait_timeout=10,
+            retry=True
+        )
+
+        print("CONNECTED:", client.is_authorized())
+
+        if client.is_authorized():
+            print("POCKET OPTION LIVE CONNECTION SUCCESSFUL")
+        else:
+            print("CONNECTED BUT NOT AUTHORIZED")
+
+        await client.wait()
+
+    except Exception as e:
+        print("CONNECTION ERROR:")
+        print(type(e).__name__, str(e))
+
+if __name__ == "__main__":
+    asyncio.run(main())
