@@ -1,8 +1,12 @@
 {
-  "name": "pocket-option-bot",
+  "name": "binary-signal-bot",
   "version": "1.0.0",
+  "description": "M1 binary options signal bot",
+  "main": "bot.js",
   "scripts": {
     "start": "node bot.js"
   },
-  "dependencies": {}
+  "dependencies": {
+    "axios": "^1.11.0"
+  }
 }
