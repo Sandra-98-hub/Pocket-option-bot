@@ -1,2 +1,4 @@
-print("SIGNAL BOT STARTING")
-print("Waiting for market data...")
+from pocket_option import PocketOptionClient
+
+print("Pocket Option package loaded successfully")
+print("Testing live connection...")
