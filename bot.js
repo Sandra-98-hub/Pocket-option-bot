@@ -22,8 +22,12 @@ const SYMBOLS = [
 const INTERVAL = "1min";
 const OUTPUT_SIZE = 100;
 
+// Maximum age allowed for a candle.
+// Anything older than this is skipped.
+const MAX_CANDLE_AGE_SECONDS = 20;
+
 // ========================================
-// CHECK ENVIRONMENT VARIABLES
+// CHECK ENVIRONMENT
 // ========================================
 
 if (!TWELVE_DATA_API_KEY) {
@@ -46,9 +50,7 @@ if (!TELEGRAM_CHAT_ID) {
 // ========================================
 
 function calculateEMA(values, period) {
-  if (values.length < period) {
-    return null;
-  }
+  if (values.length < period) return null;
 
   const multiplier = 2 / (period + 1);
 
@@ -70,9 +72,7 @@ function calculateEMA(values, period) {
 // ========================================
 
 function calculateRSI(values, period = 14) {
-  if (values.length <= period) {
-    return null;
-  }
+  if (values.length <= period) return null;
 
   let gains = 0;
   let losses = 0;
@@ -103,9 +103,7 @@ function calculateRSI(values, period = 14) {
       (averageLoss * (period - 1) + loss) / period;
   }
 
-  if (averageLoss === 0) {
-    return 100;
-  }
+  if (averageLoss === 0) return 100;
 
   const rs = averageGain / averageLoss;
 
@@ -117,18 +115,19 @@ function calculateRSI(values, period = 14) {
 // ========================================
 
 async function getCandles(symbol) {
-  const url =
-    "https://api.twelvedata.com/time_series";
-
-  const response = await axios.get(url, {
-    params: {
-      symbol: symbol,
-      interval: INTERVAL,
-      outputsize: OUTPUT_SIZE,
-      apikey: TWELVE_DATA_API_KEY,
-      timezone: "UTC"
+  const response = await axios.get(
+    "https://api.twelvedata.com/time_series",
+    {
+      params: {
+        symbol,
+        interval: INTERVAL,
+        outputsize: OUTPUT_SIZE,
+        apikey: TWELVE_DATA_API_KEY,
+        timezone: "UTC"
+      },
+      timeout: 15000
     }
-  });
+  );
 
   if (
     !response.data ||
@@ -140,9 +139,21 @@ async function getCandles(symbol) {
     );
   }
 
-  // Twelve Data sends newest candle first.
-  // Reverse so calculations run oldest → newest.
   return response.data.values.reverse();
+}
+
+// ========================================
+// CHECK CANDLE FRESHNESS
+// ========================================
+
+function getCandleAgeSeconds(candleTime) {
+  const candleDate = new Date(
+    candleTime.replace(" ", "T") + "Z"
+  );
+
+  return (
+    Date.now() - candleDate.getTime()
+  ) / 1000;
 }
 
 // ========================================
@@ -154,7 +165,8 @@ function generateSignal(candles) {
     candle => Number(candle.close)
   );
 
-  const price = closes[closes.length - 1];
+  const price =
+    closes[closes.length - 1];
 
   const ema9 =
     calculateEMA(closes, 9);
@@ -173,12 +185,10 @@ function generateSignal(candles) {
     return null;
   }
 
-  // -------------------------------
-  // BUY SCORE
-  // -------------------------------
-
   let buyScore = 0;
+  let sellScore = 0;
 
+  // BUY conditions
   if (ema9 > ema21) {
     buyScore += 40;
   }
@@ -191,12 +201,7 @@ function generateSignal(candles) {
     buyScore += 30;
   }
 
-  // -------------------------------
-  // SELL SCORE
-  // -------------------------------
-
-  let sellScore = 0;
-
+  // SELL conditions
   if (ema9 < ema21) {
     sellScore += 40;
   }
@@ -217,14 +222,15 @@ function generateSignal(candles) {
     score = buyScore;
   }
 
-  if (sellScore >= 80 && sellScore > buyScore) {
+  if (
+    sellScore >= 80 &&
+    sellScore > buyScore
+  ) {
     signal = "SELL";
     score = sellScore;
   }
 
-  if (!signal) {
-    return null;
-  }
+  if (!signal) return null;
 
   return {
     signal,
@@ -239,21 +245,24 @@ function generateSignal(candles) {
 }
 
 // ========================================
-// SEND TELEGRAM
+// TELEGRAM
 // ========================================
 
 async function sendTelegram(message) {
-  const url =
-    `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
-
-  await axios.post(url, {
-    chat_id: TELEGRAM_CHAT_ID,
-    text: message
-  });
+  await axios.post(
+    `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
+    {
+      chat_id: TELEGRAM_CHAT_ID,
+      text: message
+    },
+    {
+      timeout: 15000
+    }
+  );
 }
 
 // ========================================
-// FORMAT TELEGRAM SIGNAL
+// FORMAT SIGNAL
 // ========================================
 
 function formatSignal(symbol, data) {
@@ -319,7 +328,7 @@ Source: Twelve Data
 }
 
 // ========================================
-// PREVENT DUPLICATES
+// DUPLICATE PROTECTION
 // ========================================
 
 const lastSignals = {};
@@ -332,6 +341,30 @@ async function checkSymbol(symbol) {
   try {
     const candles =
       await getCandles(symbol);
+
+    const latestCandle =
+      candles[candles.length - 1];
+
+    const age =
+      getCandleAgeSeconds(
+        latestCandle.datetime
+      );
+
+    console.log(
+      `${symbol}: latest candle age ${age.toFixed(1)} seconds`
+    );
+
+    // Don't send stale signals.
+    if (
+      age < 0 ||
+      age > MAX_CANDLE_AGE_SECONDS
+    ) {
+      console.log(
+        `${symbol}: STALE CANDLE - signal skipped`
+      );
+
+      return;
+    }
 
     const data =
       generateSignal(candles);
@@ -353,7 +386,8 @@ async function checkSymbol(symbol) {
       return;
     }
 
-    lastSignals[symbol] = signalKey;
+    lastSignals[symbol] =
+      signalKey;
 
     const message =
       formatSignal(symbol, data);
@@ -390,7 +424,7 @@ async function checkAllMarkets() {
 }
 
 // ========================================
-// START BOT
+// START
 // ========================================
 
 console.log("================================");
@@ -399,6 +433,7 @@ console.log("================================");
 console.log("Timeframe: M1");
 console.log("Strategy: EMA 9/21 + RSI 14");
 console.log("Source: Twelve Data");
+console.log("Stale signal protection: ON");
 console.log("Markets:");
 
 SYMBOLS.forEach(symbol => {
