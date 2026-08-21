@@ -1,822 +1,371 @@
-const https = require("https");
-const http = require("http");
+const axios = require("axios");
 
-// ==========================================
-// ENVIRONMENT VARIABLES
-// ==========================================
-
-const TELEGRAM_BOT_TOKEN =
-  process.env.TELEGRAM_BOT_TOKEN;
-
-const TELEGRAM_CHAT_ID =
-  process.env.TELEGRAM_CHAT_ID;
-
-const TWELVE_DATA_API_KEY =
-  process.env.TWELVE_DATA_API_KEY;
-
-// ==========================================
+// ================================
 // SETTINGS
-// ==========================================
+// ================================
 
-const SYMBOL = "EUR/USD";
+const TWELVE_DATA_API_KEY = process.env.TWELVE_DATA_API_KEY;
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+
+const SYMBOLS = [
+  "EUR/USD",
+  "GBP/USD",
+  "USD/JPY",
+  "USD/CHF",
+  "AUD/USD",
+  "USD/CAD",
+  "NZD/USD",
+  "EUR/GBP",
+  "EUR/JPY",
+  "GBP/JPY",
+  "AUD/CAD",
+  "AUD/NZD"
+];
+
 const INTERVAL = "1min";
+const OUTPUT_SIZE = 100;
 
-const CHECK_EVERY = 60000;
+// ================================
+// CHECK SETTINGS
+// ================================
 
-const EMA_FAST = 9;
-const EMA_SLOW = 21;
-const RSI_PERIOD = 14;
+if (!TWELVE_DATA_API_KEY) {
+  console.error("ERROR: TWELVE_DATA_API_KEY is missing");
+  process.exit(1);
+}
 
-const MIN_CONFIDENCE = 75;
+if (!TELEGRAM_BOT_TOKEN) {
+  console.error("ERROR: TELEGRAM_BOT_TOKEN is missing");
+  process.exit(1);
+}
 
-let lastCandleTime = null;
-let lastSentSignal = null;
+if (!TELEGRAM_CHAT_ID) {
+  console.error("ERROR: TELEGRAM_CHAT_ID is missing");
+  process.exit(1);
+}
 
-// ==========================================
-// STARTUP
-// ==========================================
-
-console.log("====================================");
-console.log("LIVE EUR/USD SIGNAL BOT");
-console.log("====================================");
-
-console.log("Market:", SYMBOL);
-console.log("Timeframe:", INTERVAL);
-console.log("Strategy: EMA 9 + EMA 21 + RSI 14");
-console.log(
-  "Minimum confidence:",
-  MIN_CONFIDENCE + "%"
-);
-
-console.log(
-  "Telegram:",
-  TELEGRAM_BOT_TOKEN && TELEGRAM_CHAT_ID
-    ? "FOUND"
-    : "MISSING"
-);
-
-console.log(
-  "Twelve Data:",
-  TWELVE_DATA_API_KEY
-    ? "FOUND"
-    : "MISSING"
-);
-
-// ==========================================
+// ================================
 // EMA
-// ==========================================
+// ================================
 
-function calculateEMA(prices, period) {
+function calculateEMA(values, period) {
+  if (values.length < period) return null;
 
-  if (prices.length < period) {
-    return null;
-  }
+  const multiplier = 2 / (period + 1);
 
-  const multiplier =
-    2 / (period + 1);
+  let ema = values
+    .slice(0, period)
+    .reduce((sum, value) => sum + value, 0) / period;
 
-  let ema = prices[0];
-
-  for (let i = 1; i < prices.length; i++) {
-
-    ema =
-      ((prices[i] - ema) * multiplier) +
-      ema;
-
+  for (let i = period; i < values.length; i++) {
+    ema = (values[i] - ema) * multiplier + ema;
   }
 
   return ema;
 }
 
-// ==========================================
+// ================================
 // RSI
-// ==========================================
+// ================================
 
-function calculateRSI(
-  prices,
-  period = 14
-) {
-
-  if (prices.length <= period) {
-    return null;
-  }
+function calculateRSI(values, period = 14) {
+  if (values.length <= period) return null;
 
   let gains = 0;
   let losses = 0;
 
-  for (
-    let i = prices.length - period;
-    i < prices.length;
-    i++
-  ) {
-
-    const change =
-      prices[i] - prices[i - 1];
+  for (let i = 1; i <= period; i++) {
+    const change = values[i] - values[i - 1];
 
     if (change > 0) {
       gains += change;
-    }
-
-    if (change < 0) {
+    } else {
       losses += Math.abs(change);
     }
-
   }
 
-  if (losses === 0) {
-    return 100;
+  let averageGain = gains / period;
+  let averageLoss = losses / period;
+
+  for (let i = period + 1; i < values.length; i++) {
+    const change = values[i] - values[i - 1];
+
+    const gain = change > 0 ? change : 0;
+    const loss = change < 0 ? Math.abs(change) : 0;
+
+    averageGain =
+      (averageGain * (period - 1) + gain) / period;
+
+    averageLoss =
+      (averageLoss * (period - 1) + loss) / period;
   }
 
-  const rs =
-    gains / losses;
+  if (averageLoss === 0) return 100;
 
-  return 100 -
-    (100 / (1 + rs));
+  const rs = averageGain / averageLoss;
+
+  return 100 - 100 / (1 + rs);
 }
 
-// ==========================================
-// TWELVE DATA
-// ==========================================
+// ================================
+// GET MARKET DATA
+// ================================
 
-function getMarketData() {
+async function getCandles(symbol) {
+  const url = "https://api.twelvedata.com/time_series";
 
-  return new Promise(
-    (resolve, reject) => {
-
-      if (!TWELVE_DATA_API_KEY) {
-
-        reject(
-          new Error(
-            "TWELVE_DATA_API_KEY is missing"
-          )
-        );
-
-        return;
-      }
-
-      const path =
-        "/time_series" +
-        "?symbol=" +
-        encodeURIComponent(SYMBOL) +
-        "&interval=" +
-        INTERVAL +
-        "&outputsize=50" +
-        "&timezone=America/Aruba" +
-        "&apikey=" +
-        encodeURIComponent(
-          TWELVE_DATA_API_KEY
-        );
-
-      const request =
-        https.request(
-          {
-            hostname:
-              "api.twelvedata.com",
-
-            path: path,
-
-            method: "GET"
-          },
-
-          (response) => {
-
-            let data = "";
-
-            response.on(
-              "data",
-              (chunk) => {
-                data += chunk;
-              }
-            );
-
-            response.on(
-              "end",
-              () => {
-
-                try {
-
-                  const json =
-                    JSON.parse(data);
-
-                  if (
-                    json.status === "error"
-                  ) {
-
-                    reject(
-                      new Error(
-                        json.message ||
-                        "Twelve Data error"
-                      )
-                    );
-
-                    return;
-                  }
-
-                  if (
-                    !json.values ||
-                    !Array.isArray(
-                      json.values
-                    )
-                  ) {
-
-                    reject(
-                      new Error(
-                        "No market data received"
-                      )
-                    );
-
-                    return;
-                  }
-
-                  resolve(
-                    json.values
-                  );
-
-                } catch (error) {
-
-                  reject(error);
-
-                }
-
-              }
-            );
-
-          }
-        );
-
-      request.on(
-        "error",
-        (error) => {
-          reject(error);
-        }
-      );
-
-      request.end();
-
+  const response = await axios.get(url, {
+    params: {
+      symbol,
+      interval: INTERVAL,
+      outputsize: OUTPUT_SIZE,
+      apikey: TWELVE_DATA_API_KEY,
+      timezone: "UTC"
     }
-  );
-}
-
-// ==========================================
-// TELEGRAM
-// ==========================================
-
-function sendTelegramMessage(message) {
+  });
 
   if (
-    !TELEGRAM_BOT_TOKEN ||
-    !TELEGRAM_CHAT_ID
+    !response.data ||
+    !response.data.values ||
+    response.data.values.length < 30
   ) {
-
-    console.log(
-      "Telegram credentials are missing."
+    throw new Error(
+      `No sufficient candle data for ${symbol}`
     );
-
-    return;
   }
 
-  const data =
-    JSON.stringify({
-      chat_id:
-        TELEGRAM_CHAT_ID,
-
-      text:
-        message
-    });
-
-  const request =
-    https.request(
-      {
-        hostname:
-          "api.telegram.org",
-
-        path:
-          `/bot${TELEGRAM_BOT_TOKEN}/sendMessage`,
-
-        method:
-          "POST",
-
-        headers: {
-          "Content-Type":
-            "application/json",
-
-          "Content-Length":
-            Buffer.byteLength(data)
-        }
-      },
-
-      (response) => {
-
-        let body = "";
-
-        response.on(
-          "data",
-          (chunk) => {
-            body += chunk;
-          }
-        );
-
-        response.on(
-          "end",
-          () => {
-
-            console.log(
-              "Telegram HTTP status:",
-              response.statusCode
-            );
-
-            console.log(
-              "Telegram response:",
-              body
-            );
-
-          }
-        );
-
-      }
-    );
-
-  request.on(
-    "error",
-    (error) => {
-
-      console.log(
-        "Telegram error:",
-        error.message
-      );
-
-    }
-  );
-
-  request.write(data);
-  request.end();
+  // Twelve Data returns newest first.
+  return response.data.values.reverse();
 }
 
-// ==========================================
-// SIGNAL CALCULATION
-// ==========================================
+// ================================
+// GENERATE SIGNAL
+// ================================
 
-function calculateSignal(
-  prices,
-  latest,
-  previous
-) {
+function generateSignal(candles) {
+  const closes = candles.map(c => Number(c.close));
 
-  const ema9 =
-    calculateEMA(
-      prices,
-      EMA_FAST
-    );
+  const price = closes[closes.length - 1];
 
-  const ema21 =
-    calculateEMA(
-      prices,
-      EMA_SLOW
-    );
-
-  const rsi =
-    calculateRSI(
-      prices,
-      RSI_PERIOD
-    );
+  const ema9 = calculateEMA(closes, 9);
+  const ema21 = calculateEMA(closes, 21);
+  const rsi = calculateRSI(closes, 14);
 
   if (
     ema9 === null ||
     ema21 === null ||
     rsi === null
   ) {
-
-    return {
-      signal: "NO TRADE",
-      confidence: 0,
-      ema9,
-      ema21,
-      rsi,
-      buyScore: 0,
-      sellScore: 0
-    };
-
+    return null;
   }
 
-  const price =
-    Number(latest.close);
+  let signal = null;
+  let score = 0;
 
-  const previousClose =
-    Number(previous.close);
-
-  const candleOpen =
-    Number(latest.open);
-
-  const candleClose =
-    Number(latest.close);
-
-  const bullishCandle =
-    candleClose > candleOpen;
-
-  const bearishCandle =
-    candleClose < candleOpen;
-
-  // ========================================
-  // BUY SCORE
-  // ========================================
-
-  let buyScore = 0;
-
+  // Bullish conditions
   if (ema9 > ema21) {
-    buyScore += 25;
+    score += 40;
+  }
+
+  if (rsi > 50) {
+    score += 30;
   }
 
   if (price > ema9) {
-    buyScore += 20;
+    score += 30;
   }
 
-  if (price > ema21) {
-    buyScore += 15;
+  if (score >= 80) {
+    signal = "BUY";
   }
 
-  if (
-    rsi >= 55 &&
-    rsi <= 70
-  ) {
-    buyScore += 20;
-  }
-
-  if (bullishCandle) {
-    buyScore += 10;
-  }
-
-  if (price > previousClose) {
-    buyScore += 10;
-  }
-
-  // ========================================
-  // SELL SCORE
-  // ========================================
-
+  // Bearish conditions
   let sellScore = 0;
 
   if (ema9 < ema21) {
-    sellScore += 25;
+    sellScore += 40;
+  }
+
+  if (rsi < 50) {
+    sellScore += 30;
   }
 
   if (price < ema9) {
-    sellScore += 20;
+    sellScore += 30;
   }
 
-  if (price < ema21) {
-    sellScore += 15;
-  }
-
-  if (
-    rsi <= 45 &&
-    rsi >= 30
-  ) {
-    sellScore += 20;
-  }
-
-  if (bearishCandle) {
-    sellScore += 10;
-  }
-
-  if (price < previousClose) {
-    sellScore += 10;
-  }
-
-  // ========================================
-  // FINAL SIGNAL
-  // ========================================
-
-  let signal = "NO TRADE";
-  let confidence = 0;
-
-  if (
-    buyScore >= MIN_CONFIDENCE &&
-    buyScore > sellScore
-  ) {
-
-    signal = "BUY";
-    confidence = buyScore;
-
-  } else if (
-    sellScore >= MIN_CONFIDENCE &&
-    sellScore > buyScore
-  ) {
-
+  if (sellScore >= 80) {
     signal = "SELL";
-    confidence = sellScore;
-
+    score = sellScore;
   }
+
+  if (!signal) {
+    return null;
+  }
+
+  const candleTime = candles[candles.length - 1].datetime;
 
   return {
     signal,
-    confidence,
+    score,
+    price,
     ema9,
     ema21,
     rsi,
-    buyScore,
-    sellScore
+    candleTime
   };
 }
 
-// ==========================================
-// MARKET CHECK
-// ==========================================
+// ================================
+// TELEGRAM
+// ================================
 
-async function checkMarket() {
+async function sendTelegram(message) {
+  const url =
+    `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
 
-  console.log("------------------------------------");
+  await axios.post(url, {
+    chat_id: TELEGRAM_CHAT_ID,
+    text: message
+  });
+}
 
-  console.log(
-    "Checking live EUR/USD M1..."
+// ================================
+// FORMAT SIGNAL
+// ================================
+
+function formatSignal(symbol, data) {
+  const price = Number(data.price).toFixed(5);
+  const ema9 = Number(data.ema9).toFixed(5);
+  const ema21 = Number(data.ema21).toFixed(5);
+  const rsi = Number(data.rsi).toFixed(2);
+
+  const candleDate = new Date(
+    data.candleTime.replace(" ", "T") + "Z"
   );
 
+  const signalTime =
+    candleDate.toISOString()
+      .replace("T", " ")
+      .substring(0, 19);
+
+  const expiryDate = new Date(
+    candleDate.getTime() + 60 * 1000
+  );
+
+  const expiry =
+    expiryDate.toISOString()
+      .replace("T", " ")
+      .substring(0, 19);
+
+  return (
+`🚨 BINARY OPTIONS SIGNAL 🚨
+
+📊 Pair: ${symbol}
+📈 Signal: ${data.signal}
+🎯 Filter score: ${data.score}%
+
+💰 Entry: ${price}
+⏰ Signal candle: ${signalTime}
+⏳ 1M expiry: ${expiry}
+
+EMA 9: ${ema9}
+EMA 21: ${ema21}
+RSI 14: ${rsi}
+
+Timeframe: M1
+Source: Twelve Data
+
+⚠️ Binary-options signal only.
+⚠️ Not Pocket Option OTC data.
+⚠️ No signal is guaranteed.`
+  );
+}
+
+// ================================
+// TRACK SENT SIGNALS
+// ================================
+
+const lastSignals = {};
+
+// ================================
+// CHECK ONE PAIR
+// ================================
+
+async function checkSymbol(symbol) {
   try {
+    const candles = await getCandles(symbol);
 
-    const candles =
-      await getMarketData();
+    const data = generateSignal(candles);
 
-    const ordered =
-      [...candles].reverse();
-
-    const prices =
-      ordered.map(
-        candle =>
-          Number(candle.close)
-      );
-
-    if (prices.length < 30) {
-
-      console.log(
-        "Not enough candles."
-      );
-
+    if (!data) {
+      console.log(`${symbol}: No qualifying signal`);
       return;
     }
 
-    const latest =
-      ordered[
-        ordered.length - 1
-      ];
+    const signalKey =
+      `${symbol}-${data.candleTime}-${data.signal}`;
 
-    const previous =
-      ordered[
-        ordered.length - 2
-      ];
-
-    const candleTime =
-      latest.datetime;
-
-    const price =
-      Number(latest.close);
-
-    // ======================================
-    // SAME CANDLE PROTECTION
-    // ======================================
-
-    if (
-      candleTime ===
-      lastCandleTime
-    ) {
-
-      console.log(
-        "Same candle - waiting..."
-      );
-
+    if (lastSignals[symbol] === signalKey) {
       return;
     }
 
-    lastCandleTime =
-      candleTime;
+    lastSignals[symbol] = signalKey;
 
-    // ======================================
-    // CALCULATE
-    // ======================================
+    const message = formatSignal(symbol, data);
 
-    const result =
-      calculateSignal(
-        prices,
-        latest,
-        previous
-      );
+    console.log(message);
 
-    const {
-      signal,
-      confidence,
-      ema9,
-      ema21,
-      rsi,
-      buyScore,
-      sellScore
-    } = result;
+    await sendTelegram(message);
 
     console.log(
-      "Candle:",
-      candleTime
-    );
-
-    console.log(
-      "Price:",
-      price.toFixed(5)
-    );
-
-    console.log(
-      "EMA 9:",
-      ema9.toFixed(5)
-    );
-
-    console.log(
-      "EMA 21:",
-      ema21.toFixed(5)
-    );
-
-    console.log(
-      "RSI:",
-      rsi.toFixed(2)
-    );
-
-    console.log(
-      "BUY score:",
-      buyScore
-    );
-
-    console.log(
-      "SELL score:",
-      sellScore
-    );
-
-    console.log(
-      "Signal:",
-      signal
-    );
-
-    console.log(
-      "Confidence:",
-      confidence + "%"
-    );
-
-    // ======================================
-    // NO TRADE
-    // ======================================
-
-    if (
-      signal === "NO TRADE"
-    ) {
-
-      console.log(
-        "Conditions not strong enough."
-      );
-
-      return;
-    }
-
-    // ======================================
-    // PREVENT DUPLICATES
-    // ======================================
-
-    if (
-      signal === lastSentSignal
-    ) {
-
-      console.log(
-        "Same signal as previous."
-      );
-
-      return;
-    }
-
-    lastSentSignal =
-      signal;
-
-    // ======================================
-    // CORRECT ARUBA TIME
-    // ======================================
-
-    const signalDate =
-      new Date(
-        candleTime.replace(
-          " ",
-          "T"
-        ) + "-04:00"
-      );
-
-    const expiryDate =
-      new Date(
-        signalDate.getTime() +
-        60000
-      );
-
-    const expiryTime =
-      expiryDate.toLocaleTimeString(
-        "en-US",
-        {
-          timeZone:
-            "America/Aruba",
-
-          hour:
-            "2-digit",
-
-          minute:
-            "2-digit",
-
-          hour12:
-            false
-        }
-      );
-
-    // ======================================
-    // TELEGRAM MESSAGE
-    // ======================================
-
-    const message =
-      "🚨 LIVE EUR/USD SIGNAL 🚨\n\n" +
-
-      `📊 Signal: ${signal}\n` +
-
-      `🎯 Filter score: ${confidence}%\n\n` +
-
-      `💰 Entry: ${price.toFixed(5)}\n` +
-
-      `⏰ Signal time: ${candleTime}\n` +
-
-      `⏳ 1M expiry: ${expiryTime}\n\n` +
-
-      `EMA 9: ${ema9.toFixed(5)}\n` +
-
-      `EMA 21: ${ema21.toFixed(5)}\n` +
-
-      `RSI 14: ${rsi.toFixed(2)}\n\n` +
-
-      "Timeframe: M1\n" +
-
-      "Source: Twelve Data\n" +
-
-      "⚠️ Not Pocket Option OTC data\n\n" +
-
-      "Filtered signal — not a guaranteed win.";
-
-    console.log(
-      "Sending signal to Telegram..."
-    );
-
-    sendTelegramMessage(
-      message
+      `Telegram signal sent: ${symbol} ${data.signal}`
     );
 
   } catch (error) {
-
-    console.log(
-      "Market data error:",
-      error.message
+    console.error(
+      `${symbol} ERROR:`,
+      error.response?.data || error.message
     );
-
   }
 }
 
-// ==========================================
-// START BOT
-// ==========================================
+// ================================
+// CHECK ALL PAIRS
+// ================================
 
-console.log(
-  "Starting live market monitoring..."
-);
+async function checkAllMarkets() {
+  console.log(
+    `Checking ${SYMBOLS.length} binary-options markets...`
+  );
 
-checkMarket();
+  for (const symbol of SYMBOLS) {
+    await checkSymbol(symbol);
+  }
+}
+
+// ================================
+// START
+// ================================
+
+console.log("================================");
+console.log("BINARY OPTIONS SIGNAL BOT");
+console.log("================================");
+console.log("Timeframe: M1");
+console.log("Strategy: EMA 9/21 + RSI 14");
+console.log("Source: Twelve Data");
+console.log("Markets:");
+
+SYMBOLS.forEach(symbol => {
+  console.log(`- ${symbol}`);
+});
+
+console.log("================================");
+
+checkAllMarkets();
 
 setInterval(
-  checkMarket,
-  CHECK_EVERY
-);
-
-// ==========================================
-// RENDER SERVER
-// ==========================================
-
-const PORT =
-  process.env.PORT || 10000;
-
-http.createServer(
-  (req, res) => {
-
-    res.writeHead(
-      200,
-      {
-        "Content-Type":
-          "text/plain"
-      }
-    );
-
-    res.end(
-      "Live EUR/USD Signal Bot is running"
-    );
-
-  }
-).listen(
-  PORT,
-  () => {
-
-    console.log(
-      `Server running on port ${PORT}`
-    );
-
-  }
+  checkAllMarkets,
+  60 * 1000
 );
