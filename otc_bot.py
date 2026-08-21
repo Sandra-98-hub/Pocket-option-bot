@@ -1,4 +1,5 @@
 from pocket_option import PocketOptionClient
 
-print("Pocket Option package loaded successfully")
-print("Testing live connection...")
+print("POCKET OPTION PACKAGE OK")
+print("Client:", PocketOptionClient)
+print("Ready to test live connection")
