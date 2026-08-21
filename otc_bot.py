@@ -1,14 +1,21 @@
 import inspect
-from pocket_option import PocketOptionClient
+from pocket_option import PocketOptionClient, AuthorizationData
 
 print("POCKET OPTION PACKAGE OK")
 
-client = PocketOptionClient()
+print("AUTHORIZATION DATA:")
+print(AuthorizationData)
 
-print("CONNECT SIGNATURE:")
-print(inspect.signature(client.connect))
+print("\nAUTHORIZATION SIGNATURE:")
+try:
+    print(inspect.signature(AuthorizationData))
+except Exception as e:
+    print("Could not read signature:", e)
 
-print("CONNECT DOC:")
-print(inspect.getdoc(client.connect))
+print("\nAUTHORIZATION FIELDS:")
+try:
+    print(AuthorizationData.model_fields)
+except Exception as e:
+    print("Could not read fields:", e)
 
-print("DONE")
+print("\nDONE")
