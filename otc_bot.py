@@ -1,4 +1,5 @@
 import os
+import asyncio
 from pocket_option import PocketOptionClient
 
 print("POCKET OPTION PACKAGE OK")
@@ -11,13 +12,32 @@ if not session:
 
 print("PO_SESSION found")
 
-client = PocketOptionClient()
+async def main():
+    print("Creating Pocket Option client...")
 
-print("Pocket Option client created")
-print("Available client methods:")
+    client = PocketOptionClient()
 
-for name in dir(client):
-    if not name.startswith("_"):
-        print(name)
+    print("Connecting to Pocket Option...")
 
-print("END OF CLIENT METHODS")
+    try:
+        result = await client.connect(session)
+
+        print("CONNECT RESULT:")
+        print(result)
+
+        print("AUTHORIZED:", client.is_authorized())
+
+        if client.is_authorized():
+            print("POCKET OPTION CONNECTION SUCCESSFUL")
+            print("LIVE CONNECTION READY")
+        else:
+            print("POCKET OPTION CONNECTION NOT AUTHORIZED")
+
+        await client.wait()
+
+    except Exception as e:
+        print("CONNECTION ERROR:")
+        print(type(e).__name__, str(e))
+
+if __name__ == "__main__":
+    asyncio.run(main())
