@@ -10,9 +10,14 @@ if not session:
     raise SystemExit(1)
 
 print("PO_SESSION found")
-print("Creating Pocket Option client...")
 
 client = PocketOptionClient()
 
 print("Pocket Option client created")
-print("Testing live connection...")
+print("Available client methods:")
+
+for name in dir(client):
+    if not name.startswith("_"):
+        print(name)
+
+print("END OF CLIENT METHODS")
