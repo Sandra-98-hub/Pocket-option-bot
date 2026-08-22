@@ -1,4 +1,4 @@
-import os
+print("NEW SOCKET TEST VERSION", flush=True)
 import asyncio
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
