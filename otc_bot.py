@@ -1,21 +1,16 @@
-import pocket_option
+import inspect
+from pocket_option import PocketOptionClient
 
-print("PACKAGE LOCATION:")
-print(pocket_option.__file__)
+print("CLIENT SOURCE")
+print(inspect.getsource(PocketOptionClient.__init__))
 
-print("\nPACKAGE CONSTANTS:")
+print("\nMODULE ATTRIBUTES")
+import pocket_option.client as client_module
 
-try:
-    from pocket_option import constants
-
-    for name in dir(constants):
-        if not name.startswith("_"):
-            value = getattr(constants, name)
-
-            if isinstance(value, (str, int, float, bool)):
-                print(name, "=", value)
-
-except Exception as e:
-    print("ERROR:", type(e).__name__, str(e))
+for name in dir(client_module):
+    if not name.startswith("_"):
+        value = getattr(client_module, name)
+        if isinstance(value, str):
+            print(name, "=", value)
 
 print("\nDONE")
