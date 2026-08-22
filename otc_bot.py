@@ -1,11 +1,15 @@
-import inspect
-from pocket_option import PocketOptionClient
-from pocket_option import AuthorizationData
+import pocket_option
+from pocket_option import IsDemo
 
-print("CLIENT CONNECT SOURCE")
-print(inspect.getsource(PocketOptionClient.connect))
+print("PACKAGE:", pocket_option.__file__)
 
-print("\nAUTHORIZATION SOURCE")
-print(inspect.getsource(AuthorizationData))
+print("ISDEMO:")
+print(IsDemo)
 
-print("\nDONE")
+print("ISDEMO TYPE:")
+try:
+    print(IsDemo.__value__)
+except Exception as e:
+    print(e)
+
+print("DONE")
