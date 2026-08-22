@@ -1,15 +1,21 @@
 import pocket_option
-from pocket_option import IsDemo
 
-print("PACKAGE:", pocket_option.__file__)
+print("PACKAGE LOCATION:")
+print(pocket_option.__file__)
 
-print("ISDEMO:")
-print(IsDemo)
+print("\nPACKAGE CONSTANTS:")
 
-print("ISDEMO TYPE:")
 try:
-    print(IsDemo.__value__)
-except Exception as e:
-    print(e)
+    from pocket_option import constants
 
-print("DONE")
+    for name in dir(constants):
+        if not name.startswith("_"):
+            value = getattr(constants, name)
+
+            if isinstance(value, (str, int, float, bool)):
+                print(name, "=", value)
+
+except Exception as e:
+    print("ERROR:", type(e).__name__, str(e))
+
+print("\nDONE")
