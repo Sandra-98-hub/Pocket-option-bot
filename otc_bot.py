@@ -1,16 +1,12 @@
 import inspect
 from pocket_option import PocketOptionClient
 
-print("CLIENT SOURCE")
-print(inspect.getsource(PocketOptionClient.__init__))
+print("POCKET OPTION PACKAGE OK")
 
-print("\nMODULE ATTRIBUTES")
-import pocket_option.client as client_module
+print("\nCLIENT CONSTRUCTOR:")
+print(inspect.signature(PocketOptionClient))
 
-for name in dir(client_module):
-    if not name.startswith("_"):
-        value = getattr(client_module, name)
-        if isinstance(value, str):
-            print(name, "=", value)
+print("\nCLIENT MODULE:")
+print(inspect.getmodule(PocketOptionClient))
 
 print("\nDONE")
