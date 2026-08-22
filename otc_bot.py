@@ -1,8 +1,11 @@
+import inspect
+from pocket_option import PocketOptionClient
 from pocket_option import AuthorizationData
 
-print("AUTHORIZATION MODEL")
+print("CLIENT CONNECT SOURCE")
+print(inspect.getsource(PocketOptionClient.connect))
 
-for name, field in AuthorizationData.model_fields.items():
-    print(name, "->", field.annotation)
+print("\nAUTHORIZATION SOURCE")
+print(inspect.getsource(AuthorizationData))
 
-print("DONE")
+print("\nDONE")
