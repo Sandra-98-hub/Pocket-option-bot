@@ -1,12 +1,34 @@
 import os
 import asyncio
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from pocket_option import PocketOptionClient
 from pocket_option.constants import Regions
 from pocket_option.models import AuthorizationData
 
 
+PORT = int(os.getenv("PORT", "10000"))
+
+
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Pocket Option bot is running")
+
+    def log_message(self, format, *args):
+        pass
+
+
+def start_web_server():
+    server = HTTPServer(("0.0.0.0", PORT), HealthHandler)
+    print(f"Health server listening on port {PORT}")
+    server.serve_forever()
+
+
 async def main():
+
     session = os.getenv("PO_SESSION")
     uid = os.getenv("PO_UID")
 
@@ -32,6 +54,9 @@ async def main():
         "isOptimized": True,
     })
 
+    print("Authorization created")
+    print("Connecting to Pocket Option...")
+
     @client.on.connect
     async def on_connect(data=None):
         print("CONNECTED TO POCKET OPTION")
@@ -40,15 +65,19 @@ async def main():
     @client.on.success_auth
     async def on_success_auth(data):
         print("POCKET OPTION AUTHORIZED")
-        print("Authorization successful")
-
-    print("Connecting...")
 
     await client.connect(Regions.DEMO)
+
+    print("Connection test running...")
 
     while True:
         await asyncio.sleep(60)
 
 
 if __name__ == "__main__":
+    threading.Thread(
+        target=start_web_server,
+        daemon=True
+    ).start()
+
     asyncio.run(main())
