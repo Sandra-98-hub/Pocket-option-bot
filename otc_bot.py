@@ -1,12 +1,8 @@
-from pocket_option import IsDemo
+from pocket_option import AuthorizationData
 
-print("IsDemo type:")
-print(IsDemo)
+print("AUTHORIZATION MODEL")
 
-print("IsDemo values:")
-try:
-    print(list(IsDemo))
-except Exception as e:
-    print("Not an enum:", e)
+for name, field in AuthorizationData.model_fields.items():
+    print(name, "->", field.annotation)
 
 print("DONE")
