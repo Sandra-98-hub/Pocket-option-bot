@@ -4,6 +4,8 @@ import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from pocket_option import PocketOptionClient
+from pocket_option.constants import Regions
+from pocket_option.models import AuthorizationData
 
 
 # ==========================================
@@ -41,13 +43,13 @@ def start_web_server():
 
 
 # ==========================================
-# POCKET OPTION EVENT MONITOR
+# POCKET OPTION
 # ==========================================
 
 async def main():
 
     print("==================================", flush=True)
-    print("POCKET OPTION EVENT MONITOR", flush=True)
+    print("POCKET OPTION BOT", flush=True)
     print("==================================", flush=True)
 
     session = os.getenv("PO_SESSION")
@@ -64,6 +66,10 @@ async def main():
     print("PO_SESSION found", flush=True)
     print("PO_UID found", flush=True)
 
+    # --------------------------------------
+    # CREATE CLIENT
+    # --------------------------------------
+
     try:
 
         client = PocketOptionClient(
@@ -78,7 +84,7 @@ async def main():
     except Exception as e:
 
         print(
-            "CLIENT ERROR:",
+            "CLIENT CREATION ERROR:",
             type(e).__name__,
             str(e),
             flush=True
@@ -86,11 +92,11 @@ async def main():
 
         return
 
-    # ======================================
-    # CAPTURE EVERY INCOMING EVENT
-    # ======================================
+    # --------------------------------------
+    # EVENT LISTENER
+    # --------------------------------------
 
-    async def event_handler(event_name, data=None):
+    async def on_any_event(event_name, data=None):
 
         print("==================================", flush=True)
 
@@ -106,7 +112,6 @@ async def main():
 
                 text = str(data)
 
-                # Keep logs manageable
                 if len(text) > 2000:
                     text = text[:2000] + "...[truncated]"
 
@@ -119,7 +124,7 @@ async def main():
             except Exception as e:
 
                 print(
-                    "DATA DISPLAY ERROR:",
+                    "EVENT DATA ERROR:",
                     type(e).__name__,
                     str(e),
                     flush=True
@@ -127,16 +132,11 @@ async def main():
 
         print("==================================", flush=True)
 
-
-    # ======================================
-    # REGISTER WILDCARD EVENT LISTENER
-    # ======================================
-
     try:
 
         client.add_on(
             "*",
-            handler=event_handler
+            handler=on_any_event
         )
 
         print(
@@ -155,22 +155,60 @@ async def main():
 
         return
 
-    # ======================================
-    # CONNECT
-    # ======================================
+    # --------------------------------------
+    # AUTHORIZATION
+    # --------------------------------------
 
     try:
 
+        authorization = AuthorizationData.model_validate({
+
+            "session": session,
+
+            "isDemo": 1,
+
+            "uid": int(uid),
+
+            "platform": 2,
+
+            "isFastHistory": True,
+
+            "isOptimized": True
+
+        })
+
         print(
-            "Connecting to Pocket Option...",
+            "Authorization created",
             flush=True
         )
 
+    except Exception as e:
+
+        print(
+            "AUTHORIZATION ERROR:",
+            type(e).__name__,
+            str(e),
+            flush=True
+        )
+
+        return
+
+    # --------------------------------------
+    # CONNECT
+    # --------------------------------------
+
+    print(
+        "ABOUT TO CONNECT TO POCKET OPTION",
+        flush=True
+    )
+
+    try:
+
+        # THIS IS THE CONNECTION METHOD
+        # THAT PREVIOUSLY WORKED.
+
         await client.connect(
-            "https://api.pocketoption.com",
-            wait=True,
-            wait_timeout=10,
-            retry=True
+            Regions.DEMO
         )
 
         print(
@@ -199,14 +237,19 @@ async def main():
 
         return
 
+    # --------------------------------------
+    # WAIT FOR EVENTS
+    # --------------------------------------
+
     print(
         "CONNECTED — LISTENING FOR EVENTS",
         flush=True
     )
 
-    # ======================================
-    # KEEP PROCESS ALIVE
-    # ======================================
+    print(
+        "Bot is waiting for Pocket Option events...",
+        flush=True
+    )
 
     while True:
 
@@ -230,7 +273,7 @@ if __name__ == "__main__":
     ).start()
 
     print(
-        "Starting Pocket Option event monitor...",
+        "Starting Pocket Option connection...",
         flush=True
     )
 
