@@ -1,4 +1,5 @@
 print("NEW SOCKET TEST VERSION", flush=True)
+print("SOCKET TEST READY", flush=True)
 import asyncio
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
