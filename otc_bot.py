@@ -1,7 +1,7 @@
+
 import os
 import asyncio
 import threading
-from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from pocket_option import PocketOptionClient
@@ -15,20 +15,15 @@ from pocket_option.models import AuthorizationData
 # ============================================================
 
 IS_DEMO = 0
-
 CANDLE_PERIOD = 60
-
-SIGNAL_SECONDS_BEFORE = 60
-
 PORT = int(os.getenv("PORT", "10000"))
 
 print("==========================================", flush=True)
 print("POCKET OPTION REAL OTC SIGNAL BOT", flush=True)
 print("==========================================", flush=True)
-
 print("ACCOUNT MODE: REAL", flush=True)
 print("TIMEFRAME: M1", flush=True)
-print("SIGNAL TIMING: NEXT CANDLE", flush=True)
+print("SIGNAL MODE: SIGNAL ONLY", flush=True)
 
 
 # ============================================================
@@ -38,16 +33,9 @@ print("SIGNAL TIMING: NEXT CANDLE", flush=True)
 class HealthHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
-
         self.send_response(200)
-
-        self.send_header(
-            "Content-Type",
-            "text/plain"
-        )
-
+        self.send_header("Content-Type", "text/plain")
         self.end_headers()
-
         self.wfile.write(
             b"Pocket Option real OTC signal bot is running"
         )
@@ -105,9 +93,9 @@ async def send_telegram(message):
             "text": message
         }
 
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession() as http:
 
-            async with session.post(
+            async with http.post(
                 url,
                 json=payload,
                 timeout=15
@@ -165,19 +153,12 @@ async def main():
 
         return
 
-    print(
-        "PO_SESSION found",
-        flush=True
-    )
-
-    print(
-        "PO_UID found",
-        flush=True
-    )
+    print("PO_SESSION found", flush=True)
+    print("PO_UID found", flush=True)
 
 
     # --------------------------------------------------------
-    # CLIENT
+    # CREATE CLIENT
     # --------------------------------------------------------
 
     try:
@@ -194,7 +175,40 @@ async def main():
     except Exception as e:
 
         print(
-            "CLIENT ERROR:",
+            "CLIENT CREATION ERROR:",
+            type(e).__name__,
+            str(e),
+            flush=True
+        )
+
+        return
+
+
+    # --------------------------------------------------------
+    # INITIALIZE MARKET DATA STORAGE
+    # --------------------------------------------------------
+
+    try:
+
+        print(
+            "Initializing Pocket Option market data...",
+            flush=True
+        )
+
+        default_init(
+            client,
+            sub_period=CANDLE_PERIOD
+        )
+
+        print(
+            "Market data storage initialized",
+            flush=True
+        )
+
+    except Exception as e:
+
+        print(
+            "MARKET DATA INITIALIZATION ERROR:",
             type(e).__name__,
             str(e),
             flush=True
@@ -205,7 +219,7 @@ async def main():
 
     # --------------------------------------------------------
     # AUTHORIZATION
-    # REAL ACCOUNT = isDemo 0
+    # REAL ACCOUNT = 0
     # --------------------------------------------------------
 
     try:
@@ -244,11 +258,67 @@ async def main():
 
 
     # --------------------------------------------------------
+    # WILDCARD EVENT LISTENER
+    # --------------------------------------------------------
+
+    async def on_any_event(
+        event_name,
+        data=None
+    ):
+
+        print(
+            "POCKET OPTION EVENT:",
+            event_name,
+            flush=True
+        )
+
+        if data is not None:
+
+            try:
+
+                text = str(data)
+
+                if len(text) > 2000:
+                    text = text[:2000] + "...[truncated]"
+
+                print(
+                    "EVENT DATA:",
+                    text,
+                    flush=True
+                )
+
+            except Exception:
+                pass
+
+
+    try:
+
+        client.add_on(
+            "*",
+            handler=on_any_event
+        )
+
+        print(
+            "Wildcard event listener installed",
+            flush=True
+        )
+
+    except Exception as e:
+
+        print(
+            "EVENT LISTENER ERROR:",
+            type(e).__name__,
+            str(e),
+            flush=True
+        )
+
+
+    # --------------------------------------------------------
     # CONNECT
     # --------------------------------------------------------
 
     print(
-        "Connecting to Pocket Option...",
+        "ABOUT TO CONNECT TO POCKET OPTION",
         flush=True
     )
 
@@ -279,13 +349,15 @@ async def main():
     # CONNECTION STATUS
     # --------------------------------------------------------
 
+    connected = getattr(
+        client.sio,
+        "connected",
+        False
+    )
+
     print(
         "SOCKET CONNECTED:",
-        getattr(
-            client.sio,
-            "connected",
-            False
-        ),
+        connected,
         flush=True
     )
 
@@ -297,75 +369,36 @@ async def main():
 
 
     # --------------------------------------------------------
-    # IMPORTANT
-    # --------------------------------------------------------
-    #
-    # We are NOT placing trades.
-    #
-    # We only monitor market data and generate signals.
-    #
-    # The SDK documentation shows that default_init()
-    # accepts sub_assets and sub_period for real-time
-    # market subscriptions.
-    # --------------------------------------------------------
-
-    print(
-        "Preparing OTC market subscription...",
-        flush=True
-    )
-
-
-    # --------------------------------------------------------
-    # INSPECT AVAILABLE ASSETS
+    # VERIFY STORAGE
     # --------------------------------------------------------
 
     try:
 
-        assets = getattr(
-            client,
-            "assets",
-            None
-        )
+        assets = client.assets
 
         print(
-            "ASSET STORAGE:",
-            assets,
+            "ASSETS STORAGE READY:",
+            type(assets).__name__,
             flush=True
         )
-
-        if assets is not None:
-
-            print(
-                "AVAILABLE ASSETS:",
-                assets,
-                flush=True
-            )
 
     except Exception as e:
 
         print(
-            "ASSET INSPECTION ERROR:",
+            "ASSETS STORAGE ERROR:",
             type(e).__name__,
             str(e),
             flush=True
         )
 
 
-    # --------------------------------------------------------
-    # CANDLE STORAGE
-    # --------------------------------------------------------
-
     try:
 
-        candles = getattr(
-            client,
-            "candles",
-            None
-        )
+        candles = client.candles
 
         print(
-            "CANDLE STORAGE:",
-            candles,
+            "CANDLE STORAGE READY:",
+            type(candles).__name__,
             flush=True
         )
 
@@ -380,53 +413,7 @@ async def main():
 
 
     # --------------------------------------------------------
-    # WAIT FOR AUTHORIZATION
-    # --------------------------------------------------------
-
-    try:
-
-        authorized_event = getattr(
-            client,
-            "authorized_event",
-            None
-        )
-
-        if authorized_event is not None:
-
-            print(
-                "Waiting for authorization...",
-                flush=True
-            )
-
-            await asyncio.wait_for(
-                authorized_event.wait(),
-                timeout=30
-            )
-
-            print(
-                "Pocket Option authorization confirmed",
-                flush=True
-            )
-
-    except asyncio.TimeoutError:
-
-        print(
-            "Authorization wait timed out",
-            flush=True
-        )
-
-    except Exception as e:
-
-        print(
-            "Authorization event error:",
-            type(e).__name__,
-            str(e),
-            flush=True
-        )
-
-
-    # --------------------------------------------------------
-    # LIVE STATUS
+    # STATUS
     # --------------------------------------------------------
 
     print("==========================================", flush=True)
@@ -437,12 +424,17 @@ async def main():
     )
 
     print(
-        "Waiting for OTC market data...",
+        "MARKET DATA STORAGE READY",
         flush=True
     )
 
     print(
-        "No trades will be automatically placed.",
+        "WAITING FOR OTC MARKET DATA",
+        flush=True
+    )
+
+    print(
+        "NO AUTOMATIC TRADES",
         flush=True
     )
 
@@ -455,19 +447,18 @@ async def main():
 
     while True:
 
-        now = datetime.now(
-            timezone.utc
-        ).strftime(
-            "%Y-%m-%d %H:%M:%S UTC"
-        )
+        try:
 
-        print(
-            "BOT ALIVE:",
-            now,
-            flush=True
-        )
+            print(
+                "BOT ALIVE - waiting for OTC candles...",
+                flush=True
+            )
 
-        await asyncio.sleep(30)
+            await asyncio.sleep(30)
+
+        except asyncio.CancelledError:
+
+            break
 
 
 # ============================================================
