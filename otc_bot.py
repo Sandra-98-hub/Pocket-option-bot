@@ -12,7 +12,7 @@ from pocket_option.models import AuthorizationData
 # VERSION
 # ==========================================
 
-print("SOCKET INSPECTION VERSION", flush=True)
+print("HANDLER INSPECTION VERSION", flush=True)
 
 
 # ==========================================
@@ -56,7 +56,7 @@ def start_web_server():
 async def main():
 
     print("==================================", flush=True)
-    print("POCKET OPTION SOCKET INSPECTION", flush=True)
+    print("POCKET OPTION HANDLER INSPECTION", flush=True)
     print("==================================", flush=True)
 
     # --------------------------------------
@@ -248,7 +248,7 @@ async def main():
 
 
     # --------------------------------------
-    # SOCKET INSPECTION
+    # CONNECTION STATUS
     # --------------------------------------
 
     print(
@@ -261,34 +261,16 @@ async def main():
         flush=True
     )
 
+
+    # --------------------------------------
+    # SOCKET INSPECTION
+    # --------------------------------------
+
     print(
         "SOCKET OBJECT:",
         client.sio,
         flush=True
     )
-
-    try:
-
-        methods = [
-            x
-            for x in dir(client.sio)
-            if not x.startswith("_")
-        ]
-
-        print(
-            "SOCKET METHODS:",
-            methods,
-            flush=True
-        )
-
-    except Exception as e:
-
-        print(
-            "SOCKET METHODS ERROR:",
-            type(e).__name__,
-            str(e),
-            flush=True
-        )
 
     print(
         "SOCKET CONNECTED:",
@@ -297,6 +279,24 @@ async def main():
             "connected",
             "UNKNOWN"
         ),
+        flush=True
+    )
+
+    print(
+        "SOCKET HANDLERS:",
+        client.sio.handlers,
+        flush=True
+    )
+
+    print(
+        "SOCKET NAMESPACE HANDLERS:",
+        client.sio.namespace_handlers,
+        flush=True
+    )
+
+    print(
+        "SOCKET NAMESPACES:",
+        client.sio.namespaces,
         flush=True
     )
 
