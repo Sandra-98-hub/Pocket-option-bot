@@ -11,15 +11,8 @@ from pocket_option.models import Asset, AuthorizationData
 
 PORT = int(os.getenv("PORT", "10000"))
 
-# REAL ACCOUNT
-
 IS_DEMO = 0
-
-# M1 candles
-
 CANDLE_PERIOD = 60
-
-# 8 OTC MARKETS
 
 OTC_MARKETS = [
 Asset.EURUSD_otc,
@@ -29,32 +22,25 @@ Asset.AUDUSD_otc,
 Asset.AUDCAD_otc,
 Asset.AUDNZD_otc,
 Asset.EURGBP_otc,
-Asset.USDCAD_otc,
+Asset.USDCHF_otc,
 ]
 
 class HealthHandler(BaseHTTPRequestHandler):
+def do_GET(self):
+self.send_response(200)
+self.send_header("Content-Type", "text/plain")
+self.end_headers()
+self.wfile.write(b"Pocket Option OTC Signal Bot is running")
 
 ```
-def do_GET(self):
-    self.send_response(200)
-    self.send_header("Content-Type", "text/plain")
-    self.end_headers()
-    self.wfile.write(
-        b"Pocket Option OTC Signal Bot is running"
-    )
-
 def log_message(self, format, *args):
     pass
 ```
 
 def start_health_server():
+server = HTTPServer(("0.0.0.0", PORT), HealthHandler)
 
 ```
-server = HTTPServer(
-    ("0.0.0.0", PORT),
-    HealthHandler
-)
-
 print(
     f"Health server listening on port {PORT}",
     flush=True
@@ -63,144 +49,50 @@ print(
 server.serve_forever()
 ```
 
-def value_of(obj, name, default=None):
+def get_value(obj, name, default=None):
+try:
+if isinstance(obj, dict):
+return obj.get(name, default)
 
 ```
-try:
-
-    if isinstance(obj, dict):
-        return obj.get(name, default)
-
     return getattr(obj, name, default)
 
 except Exception:
-
     return default
 ```
 
-def candle_market_name(market):
-
-```
+def market_name(market):
 try:
-    return market.value
-
+return market.value
 except Exception:
-    return str(market)
-```
+return str(market)
 
 def print_candle(market, candle):
+received = datetime.now(timezone.utc).strftime(
+"%Y-%m-%d %H:%M:%S UTC"
+)
 
 ```
-received = datetime.now(
-    timezone.utc
-).strftime(
-    "%Y-%m-%d %H:%M:%S UTC"
-)
-
-candle_time = value_of(
-    candle,
-    "time"
-)
-
-open_price = value_of(
-    candle,
-    "open"
-)
-
-high_price = value_of(
-    candle,
-    "high"
-)
-
-low_price = value_of(
-    candle,
-    "low"
-)
-
-close_price = value_of(
-    candle,
-    "close"
-)
-
-print(
-    "==========================================",
-    flush=True
-)
-
-print(
-    "NEW M1 OTC CANDLE",
-    flush=True
-)
-
-print(
-    "MARKET:",
-    candle_market_name(market),
-    flush=True
-)
-
-print(
-    "CANDLE TIME:",
-    candle_time,
-    flush=True
-)
-
-print(
-    "OPEN:",
-    open_price,
-    flush=True
-)
-
-print(
-    "HIGH:",
-    high_price,
-    flush=True
-)
-
-print(
-    "LOW:",
-    low_price,
-    flush=True
-)
-
-print(
-    "CLOSE:",
-    close_price,
-    flush=True
-)
-
-print(
-    "RECEIVED:",
-    received,
-    flush=True
-)
-
-print(
-    "==========================================",
-    flush=True
-)
+print("==========================================", flush=True)
+print("NEW M1 OTC CANDLE", flush=True)
+print("MARKET:", market_name(market), flush=True)
+print("CANDLE TIME:", get_value(candle, "time"), flush=True)
+print("OPEN:", get_value(candle, "open"), flush=True)
+print("HIGH:", get_value(candle, "high"), flush=True)
+print("LOW:", get_value(candle, "low"), flush=True)
+print("CLOSE:", get_value(candle, "close"), flush=True)
+print("RECEIVED:", received, flush=True)
+print("==========================================", flush=True)
 ```
 
 async def monitor_candles(client):
+print("M1 CANDLE MONITORING ACTIVE", flush=True)
 
 ```
-print(
-    "M1 CANDLE MONITORING ACTIVE",
-    flush=True
-)
-
-candles = getattr(
-    client,
-    "candles",
-    None
-)
+candles = getattr(client, "candles", None)
 
 if candles is None:
-
-    print(
-        "CANDLE STORAGE NOT AVAILABLE",
-        flush=True
-    )
-
+    print("CANDLE STORAGE NOT AVAILABLE", flush=True)
     return
 
 print(
@@ -212,27 +104,18 @@ print(
 last_seen = {}
 
 while True:
-
     try:
-
         for market in OTC_MARKETS:
-
             result = None
 
             try:
-
-                result = candles.get_candles(
-                    market
-                )
+                result = candles.get_candles(market)
 
             except TypeError:
-
                 try:
-
                     result = candles.get_candles(
                         asset=market
                     )
-
                 except Exception:
                     result = None
 
@@ -242,31 +125,22 @@ while True:
             if result is None:
                 continue
 
-            if isinstance(
-                result,
-                (list, tuple)
-            ):
-
+            try:
                 candle_list = list(result)
-
-            else:
-
-                try:
-                    candle_list = list(result)
-                except Exception:
-                    candle_list = [result]
+            except Exception:
+                candle_list = [result]
 
             if not candle_list:
                 continue
 
             latest = candle_list[-1]
 
-            candle_time = value_of(
+            candle_time = get_value(
                 latest,
                 "time"
             )
 
-            close_price = value_of(
+            close_price = get_value(
                 latest,
                 "close"
             )
@@ -276,18 +150,10 @@ while True:
                 str(close_price)
             )
 
-            market_key = candle_market_name(
-                market
-            )
+            name = market_name(market)
 
-            if last_seen.get(
-                market_key
-            ) != key:
-
-                last_seen[
-                    market_key
-                ] = key
-
+            if last_seen.get(name) != key:
+                last_seen[name] = key
                 print_candle(
                     market,
                     latest
@@ -296,11 +162,9 @@ while True:
         await asyncio.sleep(1)
 
     except asyncio.CancelledError:
-
         return
 
     except Exception as error:
-
         print(
             "CANDLE MONITOR ERROR:",
             type(error).__name__,
@@ -312,102 +176,59 @@ while True:
 ```
 
 async def main():
+print("==========================================", flush=True)
+print("POCKET OPTION REAL OTC SIGNAL BOT", flush=True)
+print("==========================================", flush=True)
 
 ```
-print(
-    "==========================================",
-    flush=True
-)
+print("ACCOUNT MODE: REAL", flush=True)
+print("TIMEFRAME: M1", flush=True)
+print("OTC MARKETS: 8", flush=True)
+print("SIGNAL MODE: SIGNAL ONLY", flush=True)
+print("AUTOMATIC TRADING: OFF", flush=True)
 
-print(
-    "POCKET OPTION REAL OTC SIGNAL BOT",
-    flush=True
-)
+print("MARKETS:", flush=True)
 
-print(
-    "==========================================",
-    flush=True
-)
+for market in OTC_MARKETS:
+    print(
+        " -",
+        market_name(market),
+        flush=True
+    )
 
-print(
-    "ACCOUNT MODE: REAL",
-    flush=True
-)
+print("Starting Pocket Option connection...", flush=True)
 
-print(
-    "TIMEFRAME: M1",
-    flush=True
-)
-
-print(
-    "OTC MARKETS: 8",
-    flush=True
-)
-
-print(
-    "SIGNAL MODE: SIGNAL ONLY",
-    flush=True
-)
-
-print(
-    "AUTOMATIC TRADES: OFF",
-    flush=True
-)
-
-session = os.getenv(
-    "PO_SESSION"
-)
-
-uid = os.getenv(
-    "PO_UID"
-)
+session = os.getenv("PO_SESSION")
+uid = os.getenv("PO_UID")
 
 if not session:
-
     print(
         "ERROR: PO_SESSION is missing",
         flush=True
     )
-
     return
 
 if not uid:
-
     print(
         "ERROR: PO_UID is missing",
         flush=True
     )
-
     return
 
-print(
-    "PO_SESSION found",
-    flush=True
-)
-
-print(
-    "PO_UID found",
-    flush=True
-)
+print("PO_SESSION found", flush=True)
+print("PO_UID found", flush=True)
 
 try:
-
     uid_number = int(uid)
-
 except ValueError:
-
     print(
         "ERROR: PO_UID must be numeric",
         flush=True
     )
-
     return
 
 try:
-
-    client = PocketOptionClient(
-        logger=False
-    )
+    client = PocketOptionClient(logger=False)
 
     print(
         "Pocket Option client created",
@@ -415,18 +236,15 @@ try:
     )
 
 except Exception as error:
-
     print(
         "CLIENT CREATION ERROR:",
         type(error).__name__,
         str(error),
         flush=True
     )
-
     return
 
 try:
-
     authorization = AuthorizationData.model_validate(
         {
             "session": session,
@@ -444,20 +262,17 @@ try:
     )
 
 except Exception as error:
-
     print(
         "AUTHORIZATION ERROR:",
         type(error).__name__,
         str(error),
         flush=True
     )
-
     return
 
 try:
-
     print(
-        "Initializing Pocket Option market data...",
+        "Initializing OTC market data...",
         flush=True
     )
 
@@ -473,31 +288,37 @@ try:
         flush=True
     )
 
-except Exception as error:
+    print(
+        "M1 period: 60 seconds",
+        flush=True
+    )
 
+    print(
+        "8 OTC subscriptions requested",
+        flush=True
+    )
+
+except Exception as error:
     print(
         "MARKET DATA INITIALIZATION ERROR:",
         type(error).__name__,
         str(error),
         flush=True
     )
-
     return
 
 try:
+    client.on(
+        "*",
+        client.handle_new_event
+    )
 
     print(
         "Wildcard event listener installed",
         flush=True
     )
 
-    client.on(
-        "*",
-        client.handle_new_event
-    )
-
 except Exception as error:
-
     print(
         "EVENT LISTENER ERROR:",
         type(error).__name__,
@@ -511,20 +332,15 @@ print(
 )
 
 try:
-
-    await client.connect(
-        Regions.REAL
-    )
+    await client.connect(Regions.REAL)
 
 except Exception as error:
-
     print(
         "CONNECTION ERROR:",
         type(error).__name__,
         str(error),
         flush=True
     )
-
     return
 
 print(
@@ -533,11 +349,8 @@ print(
 )
 
 try:
-
     connected = client.sio.connected
-
 except Exception:
-
     connected = False
 
 print(
@@ -547,21 +360,18 @@ print(
 )
 
 print(
-    "REAL MODE:",
+    "REAL MODE FLAG:",
     IS_DEMO == 0,
     flush=True
 )
 
 try:
-
     print(
         "ASSETS STORAGE READY:",
         type(client.assets).__name__,
         flush=True
     )
-
 except Exception as error:
-
     print(
         "ASSET STORAGE ERROR:",
         type(error).__name__,
@@ -570,15 +380,12 @@ except Exception as error:
     )
 
 try:
-
     print(
         "CANDLE STORAGE READY:",
         type(client.candles).__name__,
         flush=True
     )
-
 except Exception as error:
-
     print(
         "CANDLE STORAGE ERROR:",
         type(error).__name__,
@@ -586,45 +393,19 @@ except Exception as error:
         flush=True
     )
 
-print(
-    "==========================================",
-    flush=True
-)
-
-print(
-    "8 OTC MARKETS SUBSCRIBED",
-    flush=True
-)
-
-for market in OTC_MARKETS:
-
-    print(
-        "OTC:",
-        candle_market_name(market),
-        flush=True
-    )
-
-print(
-    "M1 CANDLE MONITORING ACTIVE",
-    flush=True
-)
-
-print(
-    "NO AUTOMATIC TRADES",
-    flush=True
-)
-
-print(
-    "==========================================",
-    flush=True
-)
+print("==========================================", flush=True)
+print("REAL ACCOUNT CONNECTION READY", flush=True)
+print("8 OTC MARKETS SUBSCRIBED", flush=True)
+print("M1 CANDLE MONITORING ACTIVE", flush=True)
+print("NO AUTOMATIC TRADES", flush=True)
+print("WAITING FOR OTC MARKET EVENTS...", flush=True)
+print("==========================================", flush=True)
 
 asyncio.create_task(
     monitor_candles(client)
 )
 
 while True:
-
     now = datetime.now(
         timezone.utc
     ).strftime(
@@ -640,29 +421,23 @@ while True:
     await asyncio.sleep(30)
 ```
 
-if **name** == "**main**":
-
-```
+def run():
 threading.Thread(
-    target=start_health_server,
-    daemon=True
+target=start_health_server,
+daemon=True
 ).start()
 
+```
 try:
-
-    asyncio.run(
-        main()
-    )
+    asyncio.run(main())
 
 except KeyboardInterrupt:
-
     print(
         "BOT STOPPED",
         flush=True
     )
 
 except Exception as error:
-
     print(
         "FATAL ERROR:",
         type(error).__name__,
@@ -670,3 +445,6 @@ except Exception as error:
         flush=True
     )
 ```
+
+if **name** == "**main**":
+run()
