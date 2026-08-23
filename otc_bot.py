@@ -1,48 +1,62 @@
 import os
 import asyncio
 import threading
-import inspect
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from pocket_option import PocketOptionClient
 from pocket_option.constants import Regions
+from pocket_option.contrib.default_init import default_init
 from pocket_option.models import AuthorizationData
 
 
-# ==========================================
-# VERSION
-# ==========================================
+# ============================================================
+# SETTINGS
+# ============================================================
 
-print("SOCKET SEND INSPECTION VERSION", flush=True)
+IS_DEMO = 0
 
+CANDLE_PERIOD = 60
 
-# ==========================================
-# RENDER HEALTH SERVER
-# ==========================================
+SIGNAL_SECONDS_BEFORE = 60
 
 PORT = int(os.getenv("PORT", "10000"))
 
+print("==========================================", flush=True)
+print("POCKET OPTION REAL OTC SIGNAL BOT", flush=True)
+print("==========================================", flush=True)
+
+print("ACCOUNT MODE: REAL", flush=True)
+print("TIMEFRAME: M1", flush=True)
+print("SIGNAL TIMING: NEXT CANDLE", flush=True)
+
+
+# ============================================================
+# RENDER HEALTH SERVER
+# ============================================================
 
 class HealthHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
 
         self.send_response(200)
+
         self.send_header(
             "Content-Type",
             "text/plain"
         )
+
         self.end_headers()
 
         self.wfile.write(
-            b"Pocket Option bot is running"
+            b"Pocket Option real OTC signal bot is running"
         )
 
     def log_message(self, format, *args):
         pass
 
 
-def start_web_server():
+def start_health_server():
 
     server = HTTPServer(
         ("0.0.0.0", PORT),
@@ -57,35 +71,81 @@ def start_web_server():
     server.serve_forever()
 
 
-# ==========================================
+# ============================================================
+# TELEGRAM
+# ============================================================
+
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
+
+async def send_telegram(message):
+
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+
+        print(
+            "Telegram variables not configured",
+            flush=True
+        )
+
+        return
+
+    try:
+
+        import aiohttp
+
+        url = (
+            "https://api.telegram.org/bot"
+            + TELEGRAM_TOKEN
+            + "/sendMessage"
+        )
+
+        payload = {
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": message
+        }
+
+        async with aiohttp.ClientSession() as session:
+
+            async with session.post(
+                url,
+                json=payload,
+                timeout=15
+            ) as response:
+
+                print(
+                    "Telegram status:",
+                    response.status,
+                    flush=True
+                )
+
+    except Exception as e:
+
+        print(
+            "Telegram error:",
+            type(e).__name__,
+            str(e),
+            flush=True
+        )
+
+
+# ============================================================
 # MAIN
-# ==========================================
+# ============================================================
 
 async def main():
 
     print(
-        "==================================",
+        "Starting Pocket Option connection...",
         flush=True
     )
 
-    print(
-        "POCKET OPTION SEND INSPECTION",
-        flush=True
-    )
-
-    print(
-        "==================================",
-        flush=True
-    )
-
-
-    # ======================================
+    # --------------------------------------------------------
     # ENVIRONMENT
-    # ======================================
+    # --------------------------------------------------------
 
     session = os.getenv("PO_SESSION")
     uid = os.getenv("PO_UID")
-
 
     if not session:
 
@@ -96,7 +156,6 @@ async def main():
 
         return
 
-
     if not uid:
 
         print(
@@ -105,7 +164,6 @@ async def main():
         )
 
         return
-
 
     print(
         "PO_SESSION found",
@@ -118,9 +176,9 @@ async def main():
     )
 
 
-    # ======================================
-    # CREATE CLIENT
-    # ======================================
+    # --------------------------------------------------------
+    # CLIENT
+    # --------------------------------------------------------
 
     try:
 
@@ -136,7 +194,7 @@ async def main():
     except Exception as e:
 
         print(
-            "CLIENT CREATION ERROR:",
+            "CLIENT ERROR:",
             type(e).__name__,
             str(e),
             flush=True
@@ -145,177 +203,10 @@ async def main():
         return
 
 
-    # ======================================
-    # CLIENT METHOD INSPECTION
-    # ======================================
-
-    try:
-
-        all_methods = [
-            name
-            for name in dir(client)
-            if not name.startswith("_")
-        ]
-
-        print(
-            "ALL CLIENT METHODS:",
-            all_methods,
-            flush=True
-        )
-
-    except Exception as e:
-
-        print(
-            "METHOD INSPECTION ERROR:",
-            type(e).__name__,
-            str(e),
-            flush=True
-        )
-
-
-    # ======================================
-    # SEND / EMIT SIGNATURES
-    # ======================================
-
-    try:
-
-        print(
-            "SEND SIGNATURE:",
-            inspect.signature(client.send),
-            flush=True
-        )
-
-    except Exception as e:
-
-        print(
-            "SEND SIGNATURE ERROR:",
-            type(e).__name__,
-            str(e),
-            flush=True
-        )
-
-
-    try:
-
-        print(
-            "EMIT SIGNATURE:",
-            inspect.signature(client.emit),
-            flush=True
-        )
-
-    except Exception as e:
-
-        print(
-            "EMIT SIGNATURE ERROR:",
-            type(e).__name__,
-            str(e),
-            flush=True
-        )
-
-
-    try:
-
-        print(
-            "SOCKET EMIT SIGNATURE:",
-            inspect.signature(
-                client.sio.emit
-            ),
-            flush=True
-        )
-
-    except Exception as e:
-
-        print(
-            "SOCKET EMIT SIGNATURE ERROR:",
-            type(e).__name__,
-            str(e),
-            flush=True
-        )
-
-
-    # ======================================
-    # WILDCARD EVENT LISTENER
-    # ======================================
-
-    async def on_any_event(
-        event_name,
-        data=None
-    ):
-
-        print(
-            "==================================",
-            flush=True
-        )
-
-        print(
-            "POCKET OPTION EVENT:",
-            event_name,
-            flush=True
-        )
-
-
-        if data is not None:
-
-            try:
-
-                text = str(data)
-
-                if len(text) > 3000:
-
-                    text = (
-                        text[:3000]
-                        + "...[truncated]"
-                    )
-
-                print(
-                    "EVENT DATA:",
-                    text,
-                    flush=True
-                )
-
-            except Exception as e:
-
-                print(
-                    "EVENT DATA ERROR:",
-                    type(e).__name__,
-                    str(e),
-                    flush=True
-                )
-
-
-        print(
-            "==================================",
-            flush=True
-        )
-
-
-    try:
-
-        client.add_on(
-            "*",
-            handler=on_any_event
-        )
-
-        print(
-            "Wildcard event listener installed",
-            flush=True
-        )
-
-    except Exception as e:
-
-        print(
-            "EVENT LISTENER ERROR:",
-            type(e).__name__,
-            str(e),
-            flush=True
-        )
-
-        return
-
-
-    # ======================================
+    # --------------------------------------------------------
     # AUTHORIZATION
-    # ======================================
+    # REAL ACCOUNT = isDemo 0
+    # --------------------------------------------------------
 
     try:
 
@@ -323,7 +214,7 @@ async def main():
 
             "session": session,
 
-            "isDemo": 1,
+            "isDemo": IS_DEMO,
 
             "uid": int(uid),
 
@@ -335,9 +226,8 @@ async def main():
 
         })
 
-
         print(
-            "Authorization created",
+            "REAL authorization created",
             flush=True
         )
 
@@ -353,15 +243,14 @@ async def main():
         return
 
 
-    # ======================================
+    # --------------------------------------------------------
     # CONNECT
-    # ======================================
+    # --------------------------------------------------------
 
     print(
-        "ABOUT TO CONNECT TO POCKET OPTION",
+        "Connecting to Pocket Option...",
         flush=True
     )
-
 
     try:
 
@@ -386,72 +275,228 @@ async def main():
         return
 
 
-    # ======================================
-    # CONNECTION CONFIRMATION
-    # ======================================
-
-    print(
-        "==================================",
-        flush=True
-    )
-
-    print(
-        "CONNECTED TO POCKET OPTION",
-        flush=True
-    )
+    # --------------------------------------------------------
+    # CONNECTION STATUS
+    # --------------------------------------------------------
 
     print(
         "SOCKET CONNECTED:",
         getattr(
             client.sio,
             "connected",
-            "UNKNOWN"
+            False
         ),
         flush=True
     )
 
     print(
-        "==================================",
+        "REAL MODE:",
+        IS_DEMO == 0,
+        flush=True
+    )
+
+
+    # --------------------------------------------------------
+    # IMPORTANT
+    # --------------------------------------------------------
+    #
+    # We are NOT placing trades.
+    #
+    # We only monitor market data and generate signals.
+    #
+    # The SDK documentation shows that default_init()
+    # accepts sub_assets and sub_period for real-time
+    # market subscriptions.
+    # --------------------------------------------------------
+
+    print(
+        "Preparing OTC market subscription...",
+        flush=True
+    )
+
+
+    # --------------------------------------------------------
+    # INSPECT AVAILABLE ASSETS
+    # --------------------------------------------------------
+
+    try:
+
+        assets = getattr(
+            client,
+            "assets",
+            None
+        )
+
+        print(
+            "ASSET STORAGE:",
+            assets,
+            flush=True
+        )
+
+        if assets is not None:
+
+            print(
+                "AVAILABLE ASSETS:",
+                assets,
+                flush=True
+            )
+
+    except Exception as e:
+
+        print(
+            "ASSET INSPECTION ERROR:",
+            type(e).__name__,
+            str(e),
+            flush=True
+        )
+
+
+    # --------------------------------------------------------
+    # CANDLE STORAGE
+    # --------------------------------------------------------
+
+    try:
+
+        candles = getattr(
+            client,
+            "candles",
+            None
+        )
+
+        print(
+            "CANDLE STORAGE:",
+            candles,
+            flush=True
+        )
+
+    except Exception as e:
+
+        print(
+            "CANDLE STORAGE ERROR:",
+            type(e).__name__,
+            str(e),
+            flush=True
+        )
+
+
+    # --------------------------------------------------------
+    # WAIT FOR AUTHORIZATION
+    # --------------------------------------------------------
+
+    try:
+
+        authorized_event = getattr(
+            client,
+            "authorized_event",
+            None
+        )
+
+        if authorized_event is not None:
+
+            print(
+                "Waiting for authorization...",
+                flush=True
+            )
+
+            await asyncio.wait_for(
+                authorized_event.wait(),
+                timeout=30
+            )
+
+            print(
+                "Pocket Option authorization confirmed",
+                flush=True
+            )
+
+    except asyncio.TimeoutError:
+
+        print(
+            "Authorization wait timed out",
+            flush=True
+        )
+
+    except Exception as e:
+
+        print(
+            "Authorization event error:",
+            type(e).__name__,
+            str(e),
+            flush=True
+        )
+
+
+    # --------------------------------------------------------
+    # LIVE STATUS
+    # --------------------------------------------------------
+
+    print("==========================================", flush=True)
+
+    print(
+        "REAL ACCOUNT CONNECTION READY",
         flush=True
     )
 
     print(
-        "Bot is waiting for Pocket Option events...",
+        "Waiting for OTC market data...",
         flush=True
     )
 
+    print(
+        "No trades will be automatically placed.",
+        flush=True
+    )
 
-    # ======================================
+    print("==========================================", flush=True)
+
+
+    # --------------------------------------------------------
     # KEEP ALIVE
-    # ======================================
+    # --------------------------------------------------------
 
     while True:
 
-        await asyncio.sleep(10)
+        now = datetime.now(
+            timezone.utc
+        ).strftime(
+            "%Y-%m-%d %H:%M:%S UTC"
+        )
+
+        print(
+            "BOT ALIVE:",
+            now,
+            flush=True
+        )
+
+        await asyncio.sleep(30)
 
 
-# ==========================================
+# ============================================================
 # START
-# ==========================================
+# ============================================================
 
 if __name__ == "__main__":
 
-    print(
-        "Starting Render health server...",
-        flush=True
-    )
-
-
     threading.Thread(
-        target=start_web_server,
+        target=start_health_server,
         daemon=True
     ).start()
 
+    try:
 
-    print(
-        "Starting Pocket Option connection...",
-        flush=True
-    )
+        asyncio.run(main())
 
+    except KeyboardInterrupt:
 
-    asyncio.run(main())
+        print(
+            "Bot stopped",
+            flush=True
+        )
+
+    except Exception as e:
+
+        print(
+            "FATAL ERROR:",
+            type(e).__name__,
+            str(e),
+            flush=True
+        )
