@@ -2,7 +2,6 @@
 import os
 import asyncio
 import threading
-import inspect
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -16,10 +15,15 @@ from pocket_option.models import Asset, AuthorizationData
 # SETTINGS
 # ============================================================
 
-IS_DEMO = 0
-CANDLE_PERIOD = 60
 PORT = int(os.getenv("PORT", "10000"))
 
+# REAL ACCOUNT
+IS_DEMO = 0
+
+# M1 = 60 seconds
+CANDLE_PERIOD = 60
+
+# 8 OTC MARKETS
 OTC_MARKETS = [
     Asset.EURUSD_otc,
     Asset.GBPUSD_otc,
@@ -33,24 +37,7 @@ OTC_MARKETS = [
 
 
 # ============================================================
-# STARTUP
-# ============================================================
-
-print("==========================================", flush=True)
-print("POCKET OPTION REAL OTC CANDLE MONITOR", flush=True)
-print("==========================================", flush=True)
-
-print("ACCOUNT MODE: REAL", flush=True)
-print("TIMEFRAME: M1", flush=True)
-print("OTC MARKETS: 8", flush=True)
-print("AUTOMATIC TRADING: OFF", flush=True)
-
-for market in OTC_MARKETS:
-    print("SUBSCRIBE:", market, flush=True)
-
-
-# ============================================================
-# RENDER HEALTH SERVER
+# HEALTH SERVER FOR RENDER
 # ============================================================
 
 class HealthHandler(BaseHTTPRequestHandler):
@@ -60,7 +47,7 @@ class HealthHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/plain")
         self.end_headers()
         self.wfile.write(
-            b"Pocket Option OTC candle monitor is running"
+            b"Pocket Option OTC Signal Bot is running"
         )
 
     def log_message(self, format, *args):
@@ -83,10 +70,10 @@ def start_health_server():
 
 
 # ============================================================
-# SAFE OBJECT READER
+# SAFE VALUE READER
 # ============================================================
 
-def safe_get(obj, name, default=None):
+def get_value(obj, name, default=None):
 
     try:
 
@@ -101,15 +88,40 @@ def safe_get(obj, name, default=None):
 
 
 # ============================================================
-# CANDLE DISPLAY
+# PRINT CANDLE
 # ============================================================
 
 def print_candle(market, candle):
 
-    now = datetime.now(
+    received = datetime.now(
         timezone.utc
     ).strftime(
         "%Y-%m-%d %H:%M:%S UTC"
+    )
+
+    candle_time = get_value(
+        candle,
+        "time"
+    )
+
+    open_price = get_value(
+        candle,
+        "open"
+    )
+
+    high_price = get_value(
+        candle,
+        "high"
+    )
+
+    low_price = get_value(
+        candle,
+        "low"
+    )
+
+    close_price = get_value(
+        candle,
+        "close"
     )
 
     print(
@@ -118,7 +130,7 @@ def print_candle(market, candle):
     )
 
     print(
-        "NEW M1 CANDLE",
+        "NEW M1 OTC CANDLE",
         flush=True
     )
 
@@ -129,38 +141,38 @@ def print_candle(market, candle):
     )
 
     print(
-        "RECEIVED:",
-        now,
-        flush=True
-    )
-
-    print(
-        "TIME:",
-        safe_get(candle, "time"),
+        "CANDLE TIME:",
+        candle_time,
         flush=True
     )
 
     print(
         "OPEN:",
-        safe_get(candle, "open"),
+        open_price,
         flush=True
     )
 
     print(
         "HIGH:",
-        safe_get(candle, "high"),
+        high_price,
         flush=True
     )
 
     print(
         "LOW:",
-        safe_get(candle, "low"),
+        low_price,
         flush=True
     )
 
     print(
         "CLOSE:",
-        safe_get(candle, "close"),
+        close_price,
+        flush=True
+    )
+
+    print(
+        "RECEIVED:",
+        received,
         flush=True
     )
 
@@ -171,13 +183,13 @@ def print_candle(market, candle):
 
 
 # ============================================================
-# CANDLE STORAGE MONITOR
+# CANDLE MONITOR
 # ============================================================
 
-async def monitor_candle_storage(client):
+async def monitor_candles(client):
 
     print(
-        "Starting candle storage monitor...",
+        "CANDLE MONITOR STARTED",
         flush=True
     )
 
@@ -190,50 +202,17 @@ async def monitor_candle_storage(client):
     if candles is None:
 
         print(
-            "ERROR: client.candles is unavailable",
+            "ERROR: Candle storage unavailable",
             flush=True
         )
 
         return
-
 
     print(
         "CANDLE STORAGE:",
         type(candles).__name__,
         flush=True
     )
-
-
-    # --------------------------------------------------------
-    # Show the actual method signature in the logs.
-    # This avoids guessing the API of the installed version.
-    # --------------------------------------------------------
-
-    try:
-
-        method = getattr(
-            candles,
-            "get_candles",
-            None
-        )
-
-        if method:
-
-            print(
-                "get_candles signature:",
-                inspect.signature(method),
-                flush=True
-            )
-
-    except Exception as e:
-
-        print(
-            "Could not inspect get_candles:",
-            type(e).__name__,
-            str(e),
-            flush=True
-        )
-
 
     last_seen = {}
 
@@ -243,10 +222,9 @@ async def monitor_candle_storage(client):
 
             for market in OTC_MARKETS:
 
-                # ------------------------------------------------
-                # Storage normally uses the Asset enum as the key.
-                # ------------------------------------------------
+                result = None
 
+                # Try positional argument first.
                 try:
 
                     result = candles.get_candles(
@@ -255,6 +233,7 @@ async def monitor_candle_storage(client):
 
                 except TypeError:
 
+                    # Try keyword form.
                     try:
 
                         result = candles.get_candles(
@@ -262,76 +241,67 @@ async def monitor_candle_storage(client):
                         )
 
                     except Exception:
-
                         result = None
 
                 except Exception:
 
                     result = None
 
-
                 if result is None:
                     continue
 
+                # Normalize result.
+                if isinstance(
+                    result,
+                    (list, tuple)
+                ):
 
-                # ------------------------------------------------
-                # Normalize the result into a list.
-                # ------------------------------------------------
-
-                if isinstance(result, (list, tuple)):
-
-                    items = list(result)
+                    candle_list = list(result)
 
                 else:
 
-                    items = [result]
+                    candle_list = [result]
 
-
-                if not items:
+                if not candle_list:
                     continue
 
+                latest = candle_list[-1]
 
-                latest = items[-1]
-
-                candle_time = safe_get(
+                candle_time = get_value(
                     latest,
                     "time"
                 )
 
-                close = safe_get(
+                close_price = get_value(
                     latest,
                     "close"
                 )
 
-
-                # ------------------------------------------------
-                # Only print a candle when it is new.
-                # ------------------------------------------------
-
                 key = (
                     str(candle_time),
-                    str(close)
+                    str(close_price)
                 )
 
-                market_key = str(market)
+                market_name = str(market)
 
-                if last_seen.get(market_key) != key:
+                if last_seen.get(
+                    market_name
+                ) != key:
 
-                    last_seen[market_key] = key
+                    last_seen[
+                        market_name
+                    ] = key
 
                     print_candle(
-                        market_key,
+                        market_name,
                         latest
                     )
 
-
             await asyncio.sleep(1)
-
 
         except asyncio.CancelledError:
 
             return
-
 
         except Exception as e:
 
@@ -346,19 +316,53 @@ async def monitor_candle_storage(client):
 
 
 # ============================================================
-# MAIN
+# MAIN BOT
 # ============================================================
 
 async def main():
 
     print(
-        "Starting Pocket Option connection...",
+        "==========================================",
         flush=True
     )
 
+    print(
+        "POCKET OPTION REAL OTC SIGNAL BOT",
+        flush=True
+    )
+
+    print(
+        "==========================================",
+        flush=True
+    )
+
+    print(
+        "ACCOUNT MODE: REAL",
+        flush=True
+    )
+
+    print(
+        "TIMEFRAME: M1",
+        flush=True
+    )
+
+    print(
+        "OTC MARKETS: 8",
+        flush=True
+    )
+
+    print(
+        "SIGNAL MODE: SIGNAL ONLY",
+        flush=True
+    )
+
+    print(
+        "AUTOMATIC TRADES: OFF",
+        flush=True
+    )
 
     # ========================================================
-    # ENVIRONMENT
+    # ENVIRONMENT VARIABLES
     # ========================================================
 
     session = os.getenv(
@@ -397,7 +401,6 @@ async def main():
         flush=True
     )
 
-
     # ========================================================
     # CLIENT
     # ========================================================
@@ -423,7 +426,6 @@ async def main():
         )
 
         return
-
 
     # ========================================================
     # REAL AUTHORIZATION
@@ -458,15 +460,14 @@ async def main():
 
         return
 
-
     # ========================================================
-    # MARKET DATA INITIALIZATION
+    # INITIALIZE MARKET DATA
     # ========================================================
 
     try:
 
         print(
-            "Initializing 8 OTC M1 subscriptions...",
+            "Initializing Pocket Option market data...",
             flush=True
         )
 
@@ -482,11 +483,6 @@ async def main():
             flush=True
         )
 
-        print(
-            "8 OTC subscriptions requested",
-            flush=True
-        )
-
     except Exception as e:
 
         print(
@@ -497,7 +493,6 @@ async def main():
         )
 
         return
-
 
     # ========================================================
     # CONNECT
@@ -530,16 +525,17 @@ async def main():
 
         return
 
-
     # ========================================================
-    # CONNECTION STATUS
+    # SOCKET STATUS
     # ========================================================
 
-    connected = getattr(
-        client.sio,
-        "connected",
-        False
-    )
+    try:
+
+        connected = client.sio.connected
+
+    except Exception:
+
+        connected = False
 
     print(
         "SOCKET CONNECTED:",
@@ -548,11 +544,10 @@ async def main():
     )
 
     print(
-        "REAL MODE FLAG:",
+        "REAL MODE:",
         IS_DEMO == 0,
         flush=True
     )
-
 
     # ========================================================
     # STORAGE STATUS
@@ -575,7 +570,6 @@ async def main():
             flush=True
         )
 
-
     try:
 
         print(
@@ -593,24 +587,12 @@ async def main():
             flush=True
         )
 
-
     # ========================================================
-    # START CANDLE MONITOR
+    # SUBSCRIPTIONS
     # ========================================================
-
-    asyncio.create_task(
-        monitor_candle_storage(client)
-    )
-
-
-    # ========================================================
-    # READY
-    # ========================================================
-
-    print("==========================================", flush=True)
 
     print(
-        "REAL ACCOUNT CONNECTION READY",
+        "==========================================",
         flush=True
     )
 
@@ -618,6 +600,14 @@ async def main():
         "8 OTC MARKETS SUBSCRIBED",
         flush=True
     )
+
+    for market in OTC_MARKETS:
+
+        print(
+            "OTC SUBSCRIPTION:",
+            market,
+            flush=True
+        )
 
     print(
         "M1 CANDLE MONITORING ACTIVE",
@@ -630,15 +620,20 @@ async def main():
     )
 
     print(
-        "WAITING FOR CANDLES...",
+        "==========================================",
         flush=True
     )
 
-    print("==========================================", flush=True)
+    # ========================================================
+    # START CANDLE MONITOR
+    # ========================================================
 
+    asyncio.create_task(
+        monitor_candles(client)
+    )
 
     # ========================================================
-    # KEEP ALIVE
+    # KEEP BOT ALIVE
     # ========================================================
 
     while True:
@@ -678,7 +673,7 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
 
         print(
-            "Bot stopped",
+            "BOT STOPPED",
             flush=True
         )
 
