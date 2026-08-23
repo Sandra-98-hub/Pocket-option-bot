@@ -17,12 +17,18 @@ IS_DEMO = 0
 CANDLE_PERIOD = 60
 PORT = int(os.getenv("PORT", "10000"))
 
+
+# ============================================================
+# STARTUP
+# ============================================================
+
 print("==========================================", flush=True)
-print("POCKET OPTION REAL OTC SIGNAL BOT", flush=True)
+print("POCKET OPTION REAL OTC ASSET DISCOVERY", flush=True)
 print("==========================================", flush=True)
 print("ACCOUNT MODE: REAL", flush=True)
 print("TIMEFRAME: M1", flush=True)
 print("SIGNAL MODE: SIGNAL ONLY", flush=True)
+print("NO AUTOMATIC TRADES", flush=True)
 
 
 # ============================================================
@@ -36,7 +42,7 @@ class HealthHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "text/plain")
         self.end_headers()
         self.wfile.write(
-            b"Pocket Option real OTC signal bot is running"
+            b"Pocket Option real OTC bot is running"
         )
 
     def log_message(self, format, *args):
@@ -59,64 +65,6 @@ def start_health_server():
 
 
 # ============================================================
-# TELEGRAM
-# ============================================================
-
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
-
-
-async def send_telegram(message):
-
-    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-
-        print(
-            "Telegram variables not configured",
-            flush=True
-        )
-
-        return
-
-    try:
-
-        import aiohttp
-
-        url = (
-            "https://api.telegram.org/bot"
-            + TELEGRAM_TOKEN
-            + "/sendMessage"
-        )
-
-        payload = {
-            "chat_id": TELEGRAM_CHAT_ID,
-            "text": message
-        }
-
-        async with aiohttp.ClientSession() as http:
-
-            async with http.post(
-                url,
-                json=payload,
-                timeout=15
-            ) as response:
-
-                print(
-                    "Telegram status:",
-                    response.status,
-                    flush=True
-                )
-
-    except Exception as e:
-
-        print(
-            "Telegram error:",
-            type(e).__name__,
-            str(e),
-            flush=True
-        )
-
-
-# ============================================================
 # MAIN
 # ============================================================
 
@@ -129,7 +77,7 @@ async def main():
 
 
     # ========================================================
-    # ENVIRONMENT
+    # ENVIRONMENT VARIABLES
     # ========================================================
 
     session = os.getenv("PO_SESSION")
@@ -185,7 +133,7 @@ async def main():
 
 
     # ========================================================
-    # CREATE REAL AUTHORIZATION
+    # REAL ACCOUNT AUTHORIZATION
     # ========================================================
 
     try:
@@ -230,7 +178,7 @@ async def main():
     try:
 
         print(
-            "Initializing market data...",
+            "Initializing Pocket Option market data...",
             flush=True
         )
 
@@ -258,18 +206,13 @@ async def main():
 
 
     # ========================================================
-    # WILDCARD EVENT LISTENER
+    # EVENT LISTENER
     # ========================================================
 
     async def on_any_event(
         event_name,
         data=None
     ):
-
-        print(
-            "==========================================",
-            flush=True
-        )
 
         print(
             "POCKET OPTION EVENT:",
@@ -283,12 +226,8 @@ async def main():
 
                 text = str(data)
 
-                if len(text) > 2000:
-
-                    text = (
-                        text[:2000]
-                        + "...[truncated]"
-                    )
+                if len(text) > 1500:
+                    text = text[:1500] + "...[truncated]"
 
                 print(
                     "EVENT DATA:",
@@ -298,11 +237,6 @@ async def main():
 
             except Exception:
                 pass
-
-        print(
-            "==========================================",
-            flush=True
-        )
 
 
     try:
@@ -383,7 +317,7 @@ async def main():
 
 
     # ========================================================
-    # VERIFY ASSET STORAGE
+    # ASSET STORAGE
     # ========================================================
 
     try:
@@ -405,9 +339,11 @@ async def main():
             flush=True
         )
 
+        assets = None
+
 
     # ========================================================
-    # VERIFY CANDLE STORAGE
+    # CANDLE STORAGE
     # ========================================================
 
     try:
@@ -429,6 +365,120 @@ async def main():
             flush=True
         )
 
+        candles = None
+
+
+    # ========================================================
+    # ASSET DISCOVERY
+    # ========================================================
+
+    print("==========================================", flush=True)
+    print("AVAILABLE POCKET OPTION ASSETS", flush=True)
+    print("==========================================", flush=True)
+
+    if assets is not None:
+
+        try:
+
+            print(
+                "ASSETS OBJECT:",
+                type(assets).__name__,
+                flush=True
+            )
+
+            public_names = []
+
+            for name in dir(assets):
+
+                if name.startswith("_"):
+                    continue
+
+                public_names.append(name)
+
+            print(
+                "ASSET PUBLIC MEMBERS:",
+                public_names,
+                flush=True
+            )
+
+
+            # -----------------------------------------------
+            # Inspect useful properties
+            # -----------------------------------------------
+
+            for name in public_names:
+
+                try:
+
+                    value = getattr(
+                        assets,
+                        name
+                    )
+
+                    print(
+                        "ASSET MEMBER:",
+                        name,
+                        "=",
+                        repr(value),
+                        flush=True
+                    )
+
+                except Exception as e:
+
+                    print(
+                        "ASSET MEMBER ERROR:",
+                        name,
+                        type(e).__name__,
+                        str(e),
+                        flush=True
+                    )
+
+
+        except Exception as e:
+
+            print(
+                "ASSET DISCOVERY ERROR:",
+                type(e).__name__,
+                str(e),
+                flush=True
+            )
+
+
+    # ========================================================
+    # CANDLE STORAGE INSPECTION
+    # ========================================================
+
+    print("==========================================", flush=True)
+    print("CANDLE STORAGE INSPECTION", flush=True)
+    print("==========================================", flush=True)
+
+    if candles is not None:
+
+        try:
+
+            candle_members = []
+
+            for name in dir(candles):
+
+                if not name.startswith("_"):
+
+                    candle_members.append(name)
+
+            print(
+                "CANDLE PUBLIC MEMBERS:",
+                candle_members,
+                flush=True
+            )
+
+        except Exception as e:
+
+            print(
+                "CANDLE INSPECTION ERROR:",
+                type(e).__name__,
+                str(e),
+                flush=True
+            )
+
 
     # ========================================================
     # FINAL STATUS
@@ -447,7 +497,12 @@ async def main():
     )
 
     print(
-        "WAITING FOR OTC MARKET DATA",
+        "ASSET DISCOVERY COMPLETE",
+        flush=True
+    )
+
+    print(
+        "WAITING FOR OTC ASSET INFORMATION",
         flush=True
     )
 
@@ -466,7 +521,7 @@ async def main():
     while True:
 
         print(
-            "BOT ALIVE - waiting for OTC candles...",
+            "BOT ALIVE - waiting for OTC market data...",
             flush=True
         )
 
@@ -474,7 +529,7 @@ async def main():
 
 
 # ============================================================
-# START
+# START PROGRAM
 # ============================================================
 
 if __name__ == "__main__":
