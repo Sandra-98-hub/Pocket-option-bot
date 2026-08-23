@@ -1,5 +1,4 @@
-print("NEW SOCKET TEST VERSION", flush=True)
-print("SOCKET TEST READY", flush=True)
+import os
 import asyncio
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -7,6 +6,14 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pocket_option import PocketOptionClient
 from pocket_option.constants import Regions
 from pocket_option.models import AuthorizationData
+
+
+# ==========================================
+# VERSION TEST
+# ==========================================
+
+print("NEW SOCKET TEST VERSION", flush=True)
+print("SOCKET TEST READY", flush=True)
 
 
 # ==========================================
@@ -44,28 +51,50 @@ def start_web_server():
 
 
 # ==========================================
-# POCKET OPTION
+# MAIN BOT
 # ==========================================
 
 async def main():
 
     print("==================================", flush=True)
-    print("POCKET OPTION BOT", flush=True)
+    print("POCKET OPTION SOCKET TEST", flush=True)
     print("==================================", flush=True)
+
+    # --------------------------------------
+    # ENVIRONMENT VARIABLES
+    # --------------------------------------
 
     session = os.getenv("PO_SESSION")
     uid = os.getenv("PO_UID")
 
     if not session:
-        print("ERROR: PO_SESSION is missing", flush=True)
+
+        print(
+            "ERROR: PO_SESSION is missing",
+            flush=True
+        )
+
         return
 
     if not uid:
-        print("ERROR: PO_UID is missing", flush=True)
+
+        print(
+            "ERROR: PO_UID is missing",
+            flush=True
+        )
+
         return
 
-    print("PO_SESSION found", flush=True)
-    print("PO_UID found", flush=True)
+    print(
+        "PO_SESSION found",
+        flush=True
+    )
+
+    print(
+        "PO_UID found",
+        flush=True
+    )
+
 
     # --------------------------------------
     # CREATE CLIENT
@@ -93,13 +122,20 @@ async def main():
 
         return
 
+
     # --------------------------------------
-    # EVENT LISTENER
+    # WILDCARD EVENT LISTENER
     # --------------------------------------
 
-    async def on_any_event(event_name, data=None):
+    async def on_any_event(
+        event_name,
+        data=None
+    ):
 
-        print("==================================", flush=True)
+        print(
+            "==================================",
+            flush=True
+        )
 
         print(
             "POCKET OPTION EVENT:",
@@ -113,8 +149,12 @@ async def main():
 
                 text = str(data)
 
-                if len(text) > 2000:
-                    text = text[:2000] + "...[truncated]"
+                if len(text) > 3000:
+
+                    text = (
+                        text[:3000]
+                        + "...[truncated]"
+                    )
 
                 print(
                     "EVENT DATA:",
@@ -131,7 +171,11 @@ async def main():
                     flush=True
                 )
 
-        print("==================================", flush=True)
+        print(
+            "==================================",
+            flush=True
+        )
+
 
     try:
 
@@ -155,6 +199,7 @@ async def main():
         )
 
         return
+
 
     # --------------------------------------
     # AUTHORIZATION
@@ -194,6 +239,7 @@ async def main():
 
         return
 
+
     # --------------------------------------
     # CONNECT
     # --------------------------------------
@@ -205,8 +251,8 @@ async def main():
 
     try:
 
-        # THIS IS THE CONNECTION METHOD
-        # THAT PREVIOUSLY WORKED.
+        # This is the same connection
+        # method that previously succeeded.
 
         await client.connect(
             Regions.DEMO
@@ -238,8 +284,9 @@ async def main():
 
         return
 
+
     # --------------------------------------
-    # WAIT FOR EVENTS
+    # CONNECTED
     # --------------------------------------
 
     print(
@@ -251,6 +298,11 @@ async def main():
         "Bot is waiting for Pocket Option events...",
         flush=True
     )
+
+
+    # --------------------------------------
+    # KEEP RENDER SERVICE ALIVE
+    # --------------------------------------
 
     while True:
 
