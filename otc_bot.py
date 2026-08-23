@@ -1,6 +1,7 @@
 import os
 import asyncio
 import threading
+import inspect
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from pocket_option import PocketOptionClient
@@ -8,7 +9,16 @@ from pocket_option.constants import Regions
 from pocket_option.models import AuthorizationData
 
 
-print("MARKET METHOD INSPECTION VERSION", flush=True)
+# ==========================================
+# VERSION
+# ==========================================
+
+print("SOCKET SEND INSPECTION VERSION", flush=True)
+
+
+# ==========================================
+# RENDER HEALTH SERVER
+# ==========================================
 
 PORT = int(os.getenv("PORT", "10000"))
 
@@ -16,10 +26,17 @@ PORT = int(os.getenv("PORT", "10000"))
 class HealthHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
+
         self.send_response(200)
-        self.send_header("Content-Type", "text/plain")
+        self.send_header(
+            "Content-Type",
+            "text/plain"
+        )
         self.end_headers()
-        self.wfile.write(b"Pocket Option bot is running")
+
+        self.wfile.write(
+            b"Pocket Option bot is running"
+        )
 
     def log_message(self, format, *args):
         pass
@@ -40,25 +57,70 @@ def start_web_server():
     server.serve_forever()
 
 
+# ==========================================
+# MAIN
+# ==========================================
+
 async def main():
 
-    print("==================================", flush=True)
-    print("POCKET OPTION MARKET INSPECTION", flush=True)
-    print("==================================", flush=True)
+    print(
+        "==================================",
+        flush=True
+    )
+
+    print(
+        "POCKET OPTION SEND INSPECTION",
+        flush=True
+    )
+
+    print(
+        "==================================",
+        flush=True
+    )
+
+
+    # ======================================
+    # ENVIRONMENT
+    # ======================================
 
     session = os.getenv("PO_SESSION")
     uid = os.getenv("PO_UID")
 
+
     if not session:
-        print("ERROR: PO_SESSION is missing", flush=True)
+
+        print(
+            "ERROR: PO_SESSION is missing",
+            flush=True
+        )
+
         return
+
 
     if not uid:
-        print("ERROR: PO_UID is missing", flush=True)
+
+        print(
+            "ERROR: PO_UID is missing",
+            flush=True
+        )
+
         return
 
-    print("PO_SESSION found", flush=True)
-    print("PO_UID found", flush=True)
+
+    print(
+        "PO_SESSION found",
+        flush=True
+    )
+
+    print(
+        "PO_UID found",
+        flush=True
+    )
+
+
+    # ======================================
+    # CREATE CLIENT
+    # ======================================
 
     try:
 
@@ -84,7 +146,7 @@ async def main():
 
 
     # ======================================
-    # PRINT CLIENT METHODS
+    # CLIENT METHOD INSPECTION
     # ======================================
 
     try:
@@ -101,36 +163,6 @@ async def main():
             flush=True
         )
 
-        keywords = (
-            "candle",
-            "candles",
-            "history",
-            "market",
-            "asset",
-            "instrument",
-            "subscribe",
-            "quote",
-            "price",
-            "tick",
-            "symbol",
-            "stream"
-        )
-
-        relevant = [
-            name
-            for name in all_methods
-            if any(
-                word in name.lower()
-                for word in keywords
-            )
-        ]
-
-        print(
-            "MARKET RELATED METHODS:",
-            relevant,
-            flush=True
-        )
-
     except Exception as e:
 
         print(
@@ -142,16 +174,85 @@ async def main():
 
 
     # ======================================
-    # EVENT LISTENER
+    # SEND / EMIT SIGNATURES
     # ======================================
 
-    async def on_any_event(event_name, data=None):
+    try:
+
+        print(
+            "SEND SIGNATURE:",
+            inspect.signature(client.send),
+            flush=True
+        )
+
+    except Exception as e:
+
+        print(
+            "SEND SIGNATURE ERROR:",
+            type(e).__name__,
+            str(e),
+            flush=True
+        )
+
+
+    try:
+
+        print(
+            "EMIT SIGNATURE:",
+            inspect.signature(client.emit),
+            flush=True
+        )
+
+    except Exception as e:
+
+        print(
+            "EMIT SIGNATURE ERROR:",
+            type(e).__name__,
+            str(e),
+            flush=True
+        )
+
+
+    try:
+
+        print(
+            "SOCKET EMIT SIGNATURE:",
+            inspect.signature(
+                client.sio.emit
+            ),
+            flush=True
+        )
+
+    except Exception as e:
+
+        print(
+            "SOCKET EMIT SIGNATURE ERROR:",
+            type(e).__name__,
+            str(e),
+            flush=True
+        )
+
+
+    # ======================================
+    # WILDCARD EVENT LISTENER
+    # ======================================
+
+    async def on_any_event(
+        event_name,
+        data=None
+    ):
+
+        print(
+            "==================================",
+            flush=True
+        )
 
         print(
             "POCKET OPTION EVENT:",
             event_name,
             flush=True
         )
+
 
         if data is not None:
 
@@ -160,7 +261,11 @@ async def main():
                 text = str(data)
 
                 if len(text) > 3000:
-                    text = text[:3000] + "...[truncated]"
+
+                    text = (
+                        text[:3000]
+                        + "...[truncated]"
+                    )
 
                 print(
                     "EVENT DATA:",
@@ -168,8 +273,20 @@ async def main():
                     flush=True
                 )
 
-            except Exception:
-                pass
+            except Exception as e:
+
+                print(
+                    "EVENT DATA ERROR:",
+                    type(e).__name__,
+                    str(e),
+                    flush=True
+                )
+
+
+        print(
+            "==================================",
+            flush=True
+        )
 
 
     try:
@@ -205,13 +322,19 @@ async def main():
         authorization = AuthorizationData.model_validate({
 
             "session": session,
+
             "isDemo": 1,
+
             "uid": int(uid),
+
             "platform": 2,
+
             "isFastHistory": True,
+
             "isOptimized": True
 
         })
+
 
         print(
             "Authorization created",
@@ -239,6 +362,7 @@ async def main():
         flush=True
     )
 
+
     try:
 
         await client.connect(
@@ -262,8 +386,22 @@ async def main():
         return
 
 
+    # ======================================
+    # CONNECTION CONFIRMATION
+    # ======================================
+
     print(
-        "CONNECTED: ",
+        "==================================",
+        flush=True
+    )
+
+    print(
+        "CONNECTED TO POCKET OPTION",
+        flush=True
+    )
+
+    print(
+        "SOCKET CONNECTED:",
         getattr(
             client.sio,
             "connected",
@@ -273,7 +411,12 @@ async def main():
     )
 
     print(
-        "Waiting for market-data events...",
+        "==================================",
+        flush=True
+    )
+
+    print(
+        "Bot is waiting for Pocket Option events...",
         flush=True
     )
 
@@ -293,9 +436,22 @@ async def main():
 
 if __name__ == "__main__":
 
+    print(
+        "Starting Render health server...",
+        flush=True
+    )
+
+
     threading.Thread(
         target=start_web_server,
         daemon=True
     ).start()
+
+
+    print(
+        "Starting Pocket Option connection...",
+        flush=True
+    )
+
 
     asyncio.run(main())
