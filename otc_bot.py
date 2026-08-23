@@ -9,11 +9,10 @@ from pocket_option.models import AuthorizationData
 
 
 # ==========================================
-# VERSION TEST
+# VERSION
 # ==========================================
 
-print("NEW SOCKET TEST VERSION", flush=True)
-print("SOCKET TEST READY", flush=True)
+print("SOCKET INSPECTION VERSION", flush=True)
 
 
 # ==========================================
@@ -51,53 +50,36 @@ def start_web_server():
 
 
 # ==========================================
-# MAIN BOT
+# MAIN
 # ==========================================
 
 async def main():
 
     print("==================================", flush=True)
-    print("POCKET OPTION SOCKET TEST", flush=True)
+    print("POCKET OPTION SOCKET INSPECTION", flush=True)
     print("==================================", flush=True)
 
     # --------------------------------------
-    # ENVIRONMENT VARIABLES
+    # ENVIRONMENT
     # --------------------------------------
 
     session = os.getenv("PO_SESSION")
     uid = os.getenv("PO_UID")
 
     if not session:
-
-        print(
-            "ERROR: PO_SESSION is missing",
-            flush=True
-        )
-
+        print("ERROR: PO_SESSION is missing", flush=True)
         return
 
     if not uid:
-
-        print(
-            "ERROR: PO_UID is missing",
-            flush=True
-        )
-
+        print("ERROR: PO_UID is missing", flush=True)
         return
 
-    print(
-        "PO_SESSION found",
-        flush=True
-    )
-
-    print(
-        "PO_UID found",
-        flush=True
-    )
+    print("PO_SESSION found", flush=True)
+    print("PO_UID found", flush=True)
 
 
     # --------------------------------------
-    # CREATE CLIENT
+    # CLIENT
     # --------------------------------------
 
     try:
@@ -124,13 +106,10 @@ async def main():
 
 
     # --------------------------------------
-    # WILDCARD EVENT LISTENER
+    # EVENT LISTENER
     # --------------------------------------
 
-    async def on_any_event(
-        event_name,
-        data=None
-    ):
+    async def on_any_event(event_name, data=None):
 
         print(
             "==================================",
@@ -150,11 +129,7 @@ async def main():
                 text = str(data)
 
                 if len(text) > 3000:
-
-                    text = (
-                        text[:3000]
-                        + "...[truncated]"
-                    )
+                    text = text[:3000] + "...[truncated]"
 
                 print(
                     "EVENT DATA:",
@@ -251,9 +226,6 @@ async def main():
 
     try:
 
-        # This is the same connection
-        # method that previously succeeded.
-
         await client.connect(
             Regions.DEMO
         )
@@ -266,19 +238,9 @@ async def main():
     except Exception as e:
 
         print(
-            "==================================",
-            flush=True
-        )
-
-        print(
             "CONNECTION ERROR:",
             type(e).__name__,
             str(e),
-            flush=True
-        )
-
-        print(
-            "==================================",
             flush=True
         )
 
@@ -286,7 +248,7 @@ async def main():
 
 
     # --------------------------------------
-    # CONNECTED
+    # SOCKET INSPECTION
     # --------------------------------------
 
     print(
@@ -299,9 +261,48 @@ async def main():
         flush=True
     )
 
+    print(
+        "SOCKET OBJECT:",
+        client.sio,
+        flush=True
+    )
+
+    try:
+
+        methods = [
+            x
+            for x in dir(client.sio)
+            if not x.startswith("_")
+        ]
+
+        print(
+            "SOCKET METHODS:",
+            methods,
+            flush=True
+        )
+
+    except Exception as e:
+
+        print(
+            "SOCKET METHODS ERROR:",
+            type(e).__name__,
+            str(e),
+            flush=True
+        )
+
+    print(
+        "SOCKET CONNECTED:",
+        getattr(
+            client.sio,
+            "connected",
+            "UNKNOWN"
+        ),
+        flush=True
+    )
+
 
     # --------------------------------------
-    # KEEP RENDER SERVICE ALIVE
+    # KEEP ALIVE
     # --------------------------------------
 
     while True:
