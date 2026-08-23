@@ -8,16 +8,7 @@ from pocket_option.constants import Regions
 from pocket_option.models import AuthorizationData
 
 
-# ==========================================
-# VERSION
-# ==========================================
-
-print("HANDLER INSPECTION VERSION", flush=True)
-
-
-# ==========================================
-# RENDER HEALTH SERVER
-# ==========================================
+print("MARKET METHOD INSPECTION VERSION", flush=True)
 
 PORT = int(os.getenv("PORT", "10000"))
 
@@ -49,19 +40,11 @@ def start_web_server():
     server.serve_forever()
 
 
-# ==========================================
-# MAIN
-# ==========================================
-
 async def main():
 
     print("==================================", flush=True)
-    print("POCKET OPTION HANDLER INSPECTION", flush=True)
+    print("POCKET OPTION MARKET INSPECTION", flush=True)
     print("==================================", flush=True)
-
-    # --------------------------------------
-    # ENVIRONMENT
-    # --------------------------------------
 
     session = os.getenv("PO_SESSION")
     uid = os.getenv("PO_UID")
@@ -76,11 +59,6 @@ async def main():
 
     print("PO_SESSION found", flush=True)
     print("PO_UID found", flush=True)
-
-
-    # --------------------------------------
-    # CLIENT
-    # --------------------------------------
 
     try:
 
@@ -105,16 +83,69 @@ async def main():
         return
 
 
-    # --------------------------------------
-    # EVENT LISTENER
-    # --------------------------------------
+    # ======================================
+    # PRINT CLIENT METHODS
+    # ======================================
 
-    async def on_any_event(event_name, data=None):
+    try:
+
+        all_methods = [
+            name
+            for name in dir(client)
+            if not name.startswith("_")
+        ]
 
         print(
-            "==================================",
+            "ALL CLIENT METHODS:",
+            all_methods,
             flush=True
         )
+
+        keywords = (
+            "candle",
+            "candles",
+            "history",
+            "market",
+            "asset",
+            "instrument",
+            "subscribe",
+            "quote",
+            "price",
+            "tick",
+            "symbol",
+            "stream"
+        )
+
+        relevant = [
+            name
+            for name in all_methods
+            if any(
+                word in name.lower()
+                for word in keywords
+            )
+        ]
+
+        print(
+            "MARKET RELATED METHODS:",
+            relevant,
+            flush=True
+        )
+
+    except Exception as e:
+
+        print(
+            "METHOD INSPECTION ERROR:",
+            type(e).__name__,
+            str(e),
+            flush=True
+        )
+
+
+    # ======================================
+    # EVENT LISTENER
+    # ======================================
+
+    async def on_any_event(event_name, data=None):
 
         print(
             "POCKET OPTION EVENT:",
@@ -137,19 +168,8 @@ async def main():
                     flush=True
                 )
 
-            except Exception as e:
-
-                print(
-                    "EVENT DATA ERROR:",
-                    type(e).__name__,
-                    str(e),
-                    flush=True
-                )
-
-        print(
-            "==================================",
-            flush=True
-        )
+            except Exception:
+                pass
 
 
     try:
@@ -176,24 +196,19 @@ async def main():
         return
 
 
-    # --------------------------------------
+    # ======================================
     # AUTHORIZATION
-    # --------------------------------------
+    # ======================================
 
     try:
 
         authorization = AuthorizationData.model_validate({
 
             "session": session,
-
             "isDemo": 1,
-
             "uid": int(uid),
-
             "platform": 2,
-
             "isFastHistory": True,
-
             "isOptimized": True
 
         })
@@ -215,9 +230,9 @@ async def main():
         return
 
 
-    # --------------------------------------
+    # ======================================
     # CONNECT
-    # --------------------------------------
+    # ======================================
 
     print(
         "ABOUT TO CONNECT TO POCKET OPTION",
@@ -247,33 +262,8 @@ async def main():
         return
 
 
-    # --------------------------------------
-    # CONNECTION STATUS
-    # --------------------------------------
-
     print(
-        "CONNECTED — LISTENING FOR EVENTS",
-        flush=True
-    )
-
-    print(
-        "Bot is waiting for Pocket Option events...",
-        flush=True
-    )
-
-
-    # --------------------------------------
-    # SOCKET INSPECTION
-    # --------------------------------------
-
-    print(
-        "SOCKET OBJECT:",
-        client.sio,
-        flush=True
-    )
-
-    print(
-        "SOCKET CONNECTED:",
+        "CONNECTED: ",
         getattr(
             client.sio,
             "connected",
@@ -283,27 +273,14 @@ async def main():
     )
 
     print(
-        "SOCKET HANDLERS:",
-        client.sio.handlers,
-        flush=True
-    )
-
-    print(
-        "SOCKET NAMESPACE HANDLERS:",
-        client.sio.namespace_handlers,
-        flush=True
-    )
-
-    print(
-        "SOCKET NAMESPACES:",
-        client.sio.namespaces,
+        "Waiting for market-data events...",
         flush=True
     )
 
 
-    # --------------------------------------
+    # ======================================
     # KEEP ALIVE
-    # --------------------------------------
+    # ======================================
 
     while True:
 
@@ -316,19 +293,9 @@ async def main():
 
 if __name__ == "__main__":
 
-    print(
-        "Starting Render health server...",
-        flush=True
-    )
-
     threading.Thread(
         target=start_web_server,
         daemon=True
     ).start()
-
-    print(
-        "Starting Pocket Option connection...",
-        flush=True
-    )
 
     asyncio.run(main())
