@@ -1,450 +1,188 @@
 import os
 import asyncio
-import threading
+import inspect
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from threading import Thread
 
 from pocket_option import PocketOptionClient
-from pocket_option.constants import Regions
-from pocket_option.contrib.default_init import default_init
-from pocket_option.models import Asset, AuthorizationData
 
 PORT = int(os.getenv("PORT", "10000"))
 
-IS_DEMO = 0
-CANDLE_PERIOD = 60
-
 OTC_MARKETS = [
-Asset.EURUSD_otc,
-Asset.GBPUSD_otc,
-Asset.USDJPY_otc,
-Asset.AUDUSD_otc,
-Asset.AUDCAD_otc,
-Asset.AUDNZD_otc,
-Asset.EURGBP_otc,
-Asset.USDCHF_otc,
+    "EURUSD_otc",
+    "GBPUSD_otc",
+    "USDJPY_otc",
+    "AUDUSD_otc",
+    "AUDCAD_otc",
+    "AUDNZD_otc",
+    "EURGBP_otc",
+    "USDCHF_otc",
 ]
 
+
 class HealthHandler(BaseHTTPRequestHandler):
-def do_GET(self):
-self.send_response(200)
-self.send_header("Content-Type", "text/plain")
-self.end_headers()
-self.wfile.write(b"Pocket Option OTC Signal Bot is running")
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"Bot running")
 
-```
-def log_message(self, format, *args):
-    pass
-```
-
-def start_health_server():
-server = HTTPServer(("0.0.0.0", PORT), HealthHandler)
-
-```
-print(
-    f"Health server listening on port {PORT}",
-    flush=True
-)
-
-server.serve_forever()
-```
-
-def get_value(obj, name, default=None):
-try:
-if isinstance(obj, dict):
-return obj.get(name, default)
-
-```
-    return getattr(obj, name, default)
-
-except Exception:
-    return default
-```
-
-def market_name(market):
-try:
-return market.value
-except Exception:
-return str(market)
-
-def print_candle(market, candle):
-received = datetime.now(timezone.utc).strftime(
-"%Y-%m-%d %H:%M:%S UTC"
-)
-
-```
-print("==========================================", flush=True)
-print("NEW M1 OTC CANDLE", flush=True)
-print("MARKET:", market_name(market), flush=True)
-print("CANDLE TIME:", get_value(candle, "time"), flush=True)
-print("OPEN:", get_value(candle, "open"), flush=True)
-print("HIGH:", get_value(candle, "high"), flush=True)
-print("LOW:", get_value(candle, "low"), flush=True)
-print("CLOSE:", get_value(candle, "close"), flush=True)
-print("RECEIVED:", received, flush=True)
-print("==========================================", flush=True)
-```
-
-async def monitor_candles(client):
-print("M1 CANDLE MONITORING ACTIVE", flush=True)
-
-```
-candles = getattr(client, "candles", None)
-
-if candles is None:
-    print("CANDLE STORAGE NOT AVAILABLE", flush=True)
-    return
-
-print(
-    "CANDLE STORAGE READY:",
-    type(candles).__name__,
-    flush=True
-)
-
-last_seen = {}
-
-while True:
-    try:
-        for market in OTC_MARKETS:
-            result = None
-
-            try:
-                result = candles.get_candles(market)
-
-            except TypeError:
-                try:
-                    result = candles.get_candles(
-                        asset=market
-                    )
-                except Exception:
-                    result = None
-
-            except Exception:
-                result = None
-
-            if result is None:
-                continue
-
-            try:
-                candle_list = list(result)
-            except Exception:
-                candle_list = [result]
-
-            if not candle_list:
-                continue
-
-            latest = candle_list[-1]
-
-            candle_time = get_value(
-                latest,
-                "time"
-            )
-
-            close_price = get_value(
-                latest,
-                "close"
-            )
-
-            key = (
-                str(candle_time),
-                str(close_price)
-            )
-
-            name = market_name(market)
-
-            if last_seen.get(name) != key:
-                last_seen[name] = key
-                print_candle(
-                    market,
-                    latest
-                )
-
-        await asyncio.sleep(1)
-
-    except asyncio.CancelledError:
+    def log_message(self, format, *args):
         return
 
-    except Exception as error:
-        print(
-            "CANDLE MONITOR ERROR:",
-            type(error).__name__,
-            str(error),
-            flush=True
-        )
 
-        await asyncio.sleep(5)
-```
+def start_health_server():
+    server = HTTPServer(("0.0.0.0", PORT), HealthHandler)
+    print(f"Health server listening on port {PORT}")
+    server.serve_forever()
+
+
+def inspect_object(name, obj):
+    print("")
+    print("==========================================")
+    print(name)
+    print("==========================================")
+
+    try:
+        members = [x for x in dir(obj) if not x.startswith("_")]
+
+        print("PUBLIC MEMBERS:")
+        print(members)
+
+        for member_name in members:
+            if any(
+                word in member_name.lower()
+                for word in ["candle", "asset", "market", "subscribe"]
+            ):
+                try:
+                    member = getattr(obj, member_name)
+                    print("")
+                    print(f"{member_name} = {member}")
+
+                    if callable(member):
+                        try:
+                            print(
+                                "SIGNATURE:",
+                                inspect.signature(member)
+                            )
+                        except Exception:
+                            pass
+
+                except Exception as e:
+                    print(f"{member_name}: {e}")
+
+    except Exception as e:
+        print(f"INSPECTION ERROR: {e}")
+
 
 async def main():
-print("==========================================", flush=True)
-print("POCKET OPTION REAL OTC SIGNAL BOT", flush=True)
-print("==========================================", flush=True)
+    print("==========================================")
+    print("POCKET OPTION OTC CANDLE DIAGNOSTIC")
+    print("==========================================")
+    print("REAL ACCOUNT")
+    print("M1")
+    print("SIGNAL ONLY")
+    print("AUTOMATIC TRADING: OFF")
+    print("8 OTC MARKETS")
+    print("")
 
-```
-print("ACCOUNT MODE: REAL", flush=True)
-print("TIMEFRAME: M1", flush=True)
-print("OTC MARKETS: 8", flush=True)
-print("SIGNAL MODE: SIGNAL ONLY", flush=True)
-print("AUTOMATIC TRADING: OFF", flush=True)
+    po_session = os.getenv("PO_SESSION")
+    po_uid = os.getenv("PO_UID")
 
-print("MARKETS:", flush=True)
+    if not po_session:
+        print("ERROR: PO_SESSION missing")
+        return
 
-for market in OTC_MARKETS:
-    print(
-        " -",
-        market_name(market),
-        flush=True
-    )
+    if not po_uid:
+        print("ERROR: PO_UID missing")
+        return
 
-print("Starting Pocket Option connection...", flush=True)
+    print("PO_SESSION found")
+    print("PO_UID found")
 
-session = os.getenv("PO_SESSION")
-uid = os.getenv("PO_UID")
+    try:
+        client = PocketOptionClient(
+            ssid=po_session,
+            uid=po_uid,
+            is_demo=False
+        )
+    except TypeError:
+        client = PocketOptionClient(
+            ssid=po_session,
+            uid=po_uid
+        )
 
-if not session:
-    print(
-        "ERROR: PO_SESSION is missing",
-        flush=True
-    )
-    return
+    print("Pocket Option client created")
 
-if not uid:
-    print(
-        "ERROR: PO_UID is missing",
-        flush=True
-    )
-    return
+    inspect_object("POCKET OPTION CLIENT", client)
 
-print("PO_SESSION found", flush=True)
-print("PO_UID found", flush=True)
+    if hasattr(client, "sio"):
+        inspect_object("SOCKET.IO OBJECT", client.sio)
 
-try:
-    uid_number = int(uid)
-except ValueError:
-    print(
-        "ERROR: PO_UID must be numeric",
-        flush=True
-    )
-    return
+    if hasattr(client, "candles"):
+        print("")
+        print("==========================================")
+        print("CANDLES METHOD")
+        print("==========================================")
+        print("CANDLES:", client.candles)
 
-try:
-    client = PocketOptionClient(logger=False)
+        try:
+            print(
+                "CANDLES SIGNATURE:",
+                inspect.signature(client.candles)
+            )
+        except Exception as e:
+            print("SIGNATURE ERROR:", e)
 
-    print(
-        "Pocket Option client created",
-        flush=True
-    )
+    print("")
+    print("Connecting to Pocket Option...")
 
-except Exception as error:
-    print(
-        "CLIENT CREATION ERROR:",
-        type(error).__name__,
-        str(error),
-        flush=True
-    )
-    return
+    try:
+        await client.connect()
+    except Exception as e:
+        print("CONNECT ERROR:", e)
+        return
 
-try:
-    authorization = AuthorizationData.model_validate(
-        {
-            "session": session,
-            "isDemo": IS_DEMO,
-            "uid": uid_number,
-            "platform": 2,
-            "isFastHistory": True,
-            "isOptimized": True,
-        }
-    )
+    print("CONNECT CALL FINISHED")
 
-    print(
-        "REAL authorization created",
-        flush=True
-    )
+    try:
+        print("SOCKET CONNECTED:", client.sio.connected)
+    except Exception:
+        print("SOCKET CONNECTED: UNKNOWN")
 
-except Exception as error:
-    print(
-        "AUTHORIZATION ERROR:",
-        type(error).__name__,
-        str(error),
-        flush=True
-    )
-    return
+    print("")
+    print("==========================================")
+    print("CONNECTION READY")
+    print("==========================================")
 
-try:
-    print(
-        "Initializing OTC market data...",
-        flush=True
-    )
+    for market in OTC_MARKETS:
+        print(f"OTC MARKET: {market}")
 
-    default_init(
-        client,
-        authorization=authorization,
-        sub_assets=OTC_MARKETS,
-        sub_period=CANDLE_PERIOD,
-    )
+    print("")
+    print("DIAGNOSTIC COMPLETE")
+    print("")
 
-    print(
-        "Market data storage initialized",
-        flush=True
-    )
+    while True:
+        now = datetime.now(timezone.utc)
 
-    print(
-        "M1 period: 60 seconds",
-        flush=True
-    )
+        print(
+            "BOT ALIVE:",
+            now.strftime("%Y-%m-%d %H:%M:%S UTC")
+        )
 
-    print(
-        "8 OTC subscriptions requested",
-        flush=True
-    )
+        await asyncio.sleep(30)
 
-except Exception as error:
-    print(
-        "MARKET DATA INITIALIZATION ERROR:",
-        type(error).__name__,
-        str(error),
-        flush=True
-    )
-    return
-
-try:
-    client.on(
-        "*",
-        client.handle_new_event
-    )
-
-    print(
-        "Wildcard event listener installed",
-        flush=True
-    )
-
-except Exception as error:
-    print(
-        "EVENT LISTENER ERROR:",
-        type(error).__name__,
-        str(error),
-        flush=True
-    )
-
-print(
-    "ABOUT TO CONNECT TO POCKET OPTION",
-    flush=True
-)
-
-try:
-    await client.connect(Regions.REAL)
-
-except Exception as error:
-    print(
-        "CONNECTION ERROR:",
-        type(error).__name__,
-        str(error),
-        flush=True
-    )
-    return
-
-print(
-    "CONNECT CALL FINISHED",
-    flush=True
-)
-
-try:
-    connected = client.sio.connected
-except Exception:
-    connected = False
-
-print(
-    "SOCKET CONNECTED:",
-    connected,
-    flush=True
-)
-
-print(
-    "REAL MODE FLAG:",
-    IS_DEMO == 0,
-    flush=True
-)
-
-try:
-    print(
-        "ASSETS STORAGE READY:",
-        type(client.assets).__name__,
-        flush=True
-    )
-except Exception as error:
-    print(
-        "ASSET STORAGE ERROR:",
-        type(error).__name__,
-        str(error),
-        flush=True
-    )
-
-try:
-    print(
-        "CANDLE STORAGE READY:",
-        type(client.candles).__name__,
-        flush=True
-    )
-except Exception as error:
-    print(
-        "CANDLE STORAGE ERROR:",
-        type(error).__name__,
-        str(error),
-        flush=True
-    )
-
-print("==========================================", flush=True)
-print("REAL ACCOUNT CONNECTION READY", flush=True)
-print("8 OTC MARKETS SUBSCRIBED", flush=True)
-print("M1 CANDLE MONITORING ACTIVE", flush=True)
-print("NO AUTOMATIC TRADES", flush=True)
-print("WAITING FOR OTC MARKET EVENTS...", flush=True)
-print("==========================================", flush=True)
-
-asyncio.create_task(
-    monitor_candles(client)
-)
-
-while True:
-    now = datetime.now(
-        timezone.utc
-    ).strftime(
-        "%Y-%m-%d %H:%M:%S UTC"
-    )
-
-    print(
-        "BOT ALIVE:",
-        now,
-        flush=True
-    )
-
-    await asyncio.sleep(30)
-```
 
 def run():
-threading.Thread(
-target=start_health_server,
-daemon=True
-).start()
+    thread = Thread(
+        target=start_health_server,
+        daemon=True
+    )
+    thread.start()
 
-```
-try:
     asyncio.run(main())
 
-except KeyboardInterrupt:
-    print(
-        "BOT STOPPED",
-        flush=True
-    )
 
-except Exception as error:
-    print(
-        "FATAL ERROR:",
-        type(error).__name__,
-        str(error),
-        flush=True
-    )
-```
-
-if **name** == "**main**":
-run()
+if __name__ == "__main__":
+    run()
