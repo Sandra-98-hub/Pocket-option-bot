@@ -1,12 +1,13 @@
 import os
 import asyncio
 import threading
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from pocket_option import PocketOptionClient
 from pocket_option.constants import Regions
 from pocket_option.contrib.default_init import default_init
-from pocket_option.models import AuthorizationData
+from pocket_option.models import Asset, AuthorizationData
 
 
 # ============================================================
@@ -17,18 +18,37 @@ IS_DEMO = 0
 CANDLE_PERIOD = 60
 PORT = int(os.getenv("PORT", "10000"))
 
+# Eight OTC markets
+OTC_MARKETS = [
+    Asset.EURUSD_otc,
+    Asset.GBPUSD_otc,
+    Asset.USDJPY_otc,
+    Asset.AUDUSD_otc,
+    Asset.AUDCAD_otc,
+    Asset.AUDNZD_otc,
+    Asset.EURGBP_otc,
+    Asset.USDCHF_otc,
+]
+
 
 # ============================================================
 # STARTUP
 # ============================================================
 
 print("==========================================", flush=True)
-print("POCKET OPTION REAL OTC ASSET DISCOVERY", flush=True)
+print("POCKET OPTION REAL OTC SIGNAL BOT", flush=True)
 print("==========================================", flush=True)
+
 print("ACCOUNT MODE: REAL", flush=True)
 print("TIMEFRAME: M1", flush=True)
+print("OTC MARKETS: 8", flush=True)
 print("SIGNAL MODE: SIGNAL ONLY", flush=True)
-print("NO AUTOMATIC TRADES", flush=True)
+print("AUTOMATIC TRADING: OFF", flush=True)
+
+print("MARKETS:", flush=True)
+
+for market in OTC_MARKETS:
+    print(" -", market, flush=True)
 
 
 # ============================================================
@@ -38,11 +58,18 @@ print("NO AUTOMATIC TRADES", flush=True)
 class HealthHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
+
         self.send_response(200)
-        self.send_header("Content-Type", "text/plain")
+
+        self.send_header(
+            "Content-Type",
+            "text/plain"
+        )
+
         self.end_headers()
+
         self.wfile.write(
-            b"Pocket Option real OTC bot is running"
+            b"Pocket Option OTC signal bot is running"
         )
 
     def log_message(self, format, *args):
@@ -65,6 +92,133 @@ def start_health_server():
 
 
 # ============================================================
+# TELEGRAM
+# ============================================================
+
+TELEGRAM_TOKEN = os.getenv(
+    "TELEGRAM_BOT_TOKEN"
+)
+
+TELEGRAM_CHAT_ID = os.getenv(
+    "TELEGRAM_CHAT_ID"
+)
+
+
+async def send_telegram(message):
+
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+
+        print(
+            "Telegram not configured",
+            flush=True
+        )
+
+        return
+
+    try:
+
+        import aiohttp
+
+        url = (
+            "https://api.telegram.org/bot"
+            + TELEGRAM_TOKEN
+            + "/sendMessage"
+        )
+
+        payload = {
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": message
+        }
+
+        async with aiohttp.ClientSession() as session:
+
+            async with session.post(
+                url,
+                json=payload,
+                timeout=15
+            ) as response:
+
+                print(
+                    "Telegram response:",
+                    response.status,
+                    flush=True
+                )
+
+    except Exception as e:
+
+        print(
+            "Telegram ERROR:",
+            type(e).__name__,
+            str(e),
+            flush=True
+        )
+
+
+# ============================================================
+# EVENT HANDLER
+# ============================================================
+
+async def market_event_handler(
+    event_name,
+    data=None
+):
+
+    now = datetime.now(
+        timezone.utc
+    ).strftime(
+        "%Y-%m-%d %H:%M:%S UTC"
+    )
+
+    print(
+        "==========================================",
+        flush=True
+    )
+
+    print(
+        "MARKET EVENT:",
+        event_name,
+        flush=True
+    )
+
+    print(
+        "TIME:",
+        now,
+        flush=True
+    )
+
+    if data is not None:
+
+        try:
+
+            text = str(data)
+
+            if len(text) > 3000:
+
+                text = (
+                    text[:3000]
+                    + "...[truncated]"
+                )
+
+            print(
+                "DATA:",
+                text,
+                flush=True
+            )
+
+        except Exception:
+
+            print(
+                "DATA: [unable to display]",
+                flush=True
+            )
+
+    print(
+        "==========================================",
+        flush=True
+    )
+
+
+# ============================================================
 # MAIN
 # ============================================================
 
@@ -76,12 +230,17 @@ async def main():
     )
 
 
-    # ========================================================
-    # ENVIRONMENT VARIABLES
-    # ========================================================
+    # --------------------------------------------------------
+    # ENVIRONMENT
+    # --------------------------------------------------------
 
-    session = os.getenv("PO_SESSION")
-    uid = os.getenv("PO_UID")
+    session = os.getenv(
+        "PO_SESSION"
+    )
+
+    uid = os.getenv(
+        "PO_UID"
+    )
 
     if not session:
 
@@ -101,13 +260,20 @@ async def main():
 
         return
 
-    print("PO_SESSION found", flush=True)
-    print("PO_UID found", flush=True)
+    print(
+        "PO_SESSION found",
+        flush=True
+    )
+
+    print(
+        "PO_UID found",
+        flush=True
+    )
 
 
-    # ========================================================
+    # --------------------------------------------------------
     # CREATE CLIENT
-    # ========================================================
+    # --------------------------------------------------------
 
     try:
 
@@ -132,27 +298,24 @@ async def main():
         return
 
 
-    # ========================================================
-    # REAL ACCOUNT AUTHORIZATION
-    # ========================================================
+    # --------------------------------------------------------
+    # REAL AUTHORIZATION
+    # --------------------------------------------------------
 
     try:
 
-        authorization = AuthorizationData.model_validate({
-
-            "session": session,
-
-            "isDemo": IS_DEMO,
-
-            "uid": int(uid),
-
-            "platform": 2,
-
-            "isFastHistory": True,
-
-            "isOptimized": True
-
-        })
+        authorization = (
+            AuthorizationData.model_validate(
+                {
+                    "session": session,
+                    "isDemo": IS_DEMO,
+                    "uid": int(uid),
+                    "platform": 2,
+                    "isFastHistory": True,
+                    "isOptimized": True,
+                }
+            )
+        )
 
         print(
             "REAL authorization created",
@@ -171,25 +334,38 @@ async def main():
         return
 
 
-    # ========================================================
+    # --------------------------------------------------------
     # INITIALIZE MARKET DATA
-    # ========================================================
+    # --------------------------------------------------------
 
     try:
 
         print(
-            "Initializing Pocket Option market data...",
+            "Initializing OTC market data...",
             flush=True
         )
 
         default_init(
             client,
             authorization=authorization,
-            sub_period=CANDLE_PERIOD
+            sub_assets=OTC_MARKETS,
+            sub_period=CANDLE_PERIOD,
         )
 
         print(
             "Market data storage initialized",
+            flush=True
+        )
+
+        print(
+            "M1 period:",
+            CANDLE_PERIOD,
+            "seconds",
+            flush=True
+        )
+
+        print(
+            "8 OTC subscriptions requested",
             flush=True
         )
 
@@ -205,45 +381,15 @@ async def main():
         return
 
 
-    # ========================================================
-    # EVENT LISTENER
-    # ========================================================
-
-    async def on_any_event(
-        event_name,
-        data=None
-    ):
-
-        print(
-            "POCKET OPTION EVENT:",
-            event_name,
-            flush=True
-        )
-
-        if data is not None:
-
-            try:
-
-                text = str(data)
-
-                if len(text) > 1500:
-                    text = text[:1500] + "...[truncated]"
-
-                print(
-                    "EVENT DATA:",
-                    text,
-                    flush=True
-                )
-
-            except Exception:
-                pass
-
+    # --------------------------------------------------------
+    # WILDCARD EVENT LISTENER
+    # --------------------------------------------------------
 
     try:
 
         client.add_on(
             "*",
-            handler=on_any_event
+            handler=market_event_handler
         )
 
         print(
@@ -254,16 +400,16 @@ async def main():
     except Exception as e:
 
         print(
-            "EVENT LISTENER ERROR:",
+            "WILDCARD LISTENER ERROR:",
             type(e).__name__,
             str(e),
             flush=True
         )
 
 
-    # ========================================================
+    # --------------------------------------------------------
     # CONNECT
-    # ========================================================
+    # --------------------------------------------------------
 
     print(
         "ABOUT TO CONNECT TO POCKET OPTION",
@@ -293,9 +439,9 @@ async def main():
         return
 
 
-    # ========================================================
+    # --------------------------------------------------------
     # CONNECTION STATUS
-    # ========================================================
+    # --------------------------------------------------------
 
     connected = getattr(
         client.sio,
@@ -310,15 +456,15 @@ async def main():
     )
 
     print(
-        "REAL MODE:",
+        "REAL MODE FLAG:",
         IS_DEMO == 0,
         flush=True
     )
 
 
-    # ========================================================
-    # ASSET STORAGE
-    # ========================================================
+    # --------------------------------------------------------
+    # STORAGE CHECK
+    # --------------------------------------------------------
 
     try:
 
@@ -339,12 +485,6 @@ async def main():
             flush=True
         )
 
-        assets = None
-
-
-    # ========================================================
-    # CANDLE STORAGE
-    # ========================================================
 
     try:
 
@@ -365,124 +505,10 @@ async def main():
             flush=True
         )
 
-        candles = None
 
-
-    # ========================================================
-    # ASSET DISCOVERY
-    # ========================================================
-
-    print("==========================================", flush=True)
-    print("AVAILABLE POCKET OPTION ASSETS", flush=True)
-    print("==========================================", flush=True)
-
-    if assets is not None:
-
-        try:
-
-            print(
-                "ASSETS OBJECT:",
-                type(assets).__name__,
-                flush=True
-            )
-
-            public_names = []
-
-            for name in dir(assets):
-
-                if name.startswith("_"):
-                    continue
-
-                public_names.append(name)
-
-            print(
-                "ASSET PUBLIC MEMBERS:",
-                public_names,
-                flush=True
-            )
-
-
-            # -----------------------------------------------
-            # Inspect useful properties
-            # -----------------------------------------------
-
-            for name in public_names:
-
-                try:
-
-                    value = getattr(
-                        assets,
-                        name
-                    )
-
-                    print(
-                        "ASSET MEMBER:",
-                        name,
-                        "=",
-                        repr(value),
-                        flush=True
-                    )
-
-                except Exception as e:
-
-                    print(
-                        "ASSET MEMBER ERROR:",
-                        name,
-                        type(e).__name__,
-                        str(e),
-                        flush=True
-                    )
-
-
-        except Exception as e:
-
-            print(
-                "ASSET DISCOVERY ERROR:",
-                type(e).__name__,
-                str(e),
-                flush=True
-            )
-
-
-    # ========================================================
-    # CANDLE STORAGE INSPECTION
-    # ========================================================
-
-    print("==========================================", flush=True)
-    print("CANDLE STORAGE INSPECTION", flush=True)
-    print("==========================================", flush=True)
-
-    if candles is not None:
-
-        try:
-
-            candle_members = []
-
-            for name in dir(candles):
-
-                if not name.startswith("_"):
-
-                    candle_members.append(name)
-
-            print(
-                "CANDLE PUBLIC MEMBERS:",
-                candle_members,
-                flush=True
-            )
-
-        except Exception as e:
-
-            print(
-                "CANDLE INSPECTION ERROR:",
-                type(e).__name__,
-                str(e),
-                flush=True
-            )
-
-
-    # ========================================================
+    # --------------------------------------------------------
     # FINAL STATUS
-    # ========================================================
+    # --------------------------------------------------------
 
     print("==========================================", flush=True)
 
@@ -492,17 +518,12 @@ async def main():
     )
 
     print(
-        "MARKET DATA STORAGE READY",
+        "8 OTC MARKETS SUBSCRIBED",
         flush=True
     )
 
     print(
-        "ASSET DISCOVERY COMPLETE",
-        flush=True
-    )
-
-    print(
-        "WAITING FOR OTC ASSET INFORMATION",
+        "M1 CANDLE MONITORING ACTIVE",
         flush=True
     )
 
@@ -511,25 +532,43 @@ async def main():
         flush=True
     )
 
+    print(
+        "WAITING FOR OTC MARKET EVENTS...",
+        flush=True
+    )
+
     print("==========================================", flush=True)
 
 
-    # ========================================================
+    # --------------------------------------------------------
     # KEEP ALIVE
-    # ========================================================
+    # --------------------------------------------------------
 
     while True:
 
-        print(
-            "BOT ALIVE - waiting for OTC market data...",
-            flush=True
-        )
+        try:
 
-        await asyncio.sleep(30)
+            now = datetime.now(
+                timezone.utc
+            ).strftime(
+                "%Y-%m-%d %H:%M:%S UTC"
+            )
+
+            print(
+                "BOT ALIVE:",
+                now,
+                flush=True
+            )
+
+            await asyncio.sleep(30)
+
+        except asyncio.CancelledError:
+
+            break
 
 
 # ============================================================
-# START PROGRAM
+# START
 # ============================================================
 
 if __name__ == "__main__":
@@ -541,7 +580,9 @@ if __name__ == "__main__":
 
     try:
 
-        asyncio.run(main())
+        asyncio.run(
+            main()
+        )
 
     except KeyboardInterrupt:
 
