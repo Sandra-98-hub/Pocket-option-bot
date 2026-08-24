@@ -1,42 +1,28 @@
 import inspect
 from pocket_option import PocketOptionClient
 
-print("POCKET OPTION 0.4.0 API CHECK")
-print("================================")
+client = PocketOptionClient
 
-print("CLIENT METHODS:")
+print("POCKET OPTION 0.4.0")
+print("===================")
 
-for name in dir(PocketOptionClient):
-    if not name.startswith("_"):
-        try:
-            obj = getattr(PocketOptionClient, name)
+print("CANDLES:")
+print(client.candles)
 
-            if callable(obj):
-                try:
-                    print(name, inspect.signature(obj))
-                except Exception:
-                    print(name)
-            else:
-                print(name)
+try:
+    print("CANDLES SIGNATURE:")
+    print(inspect.signature(client.candles))
+except Exception as e:
+    print("NO SIGNATURE:", e)
 
-        except Exception:
-            pass
+print("===================")
+print("ASSETS:")
+print(client.assets)
 
-print("================================")
-print("LOOKING FOR CANDLE / MARKET METHODS")
-print("================================")
+try:
+    print("ASSETS SIGNATURE:")
+    print(inspect.signature(client.assets))
+except Exception as e:
+    print("NO SIGNATURE:", e)
 
-for name in dir(PocketOptionClient):
-    if any(x in name.lower() for x in [
-        "candle",
-        "market",
-        "asset",
-        "subscribe",
-        "history",
-        "quote"
-    ]):
-        print(name)
-
-print("================================")
-print("API CHECK COMPLETE")
-print("================================")
+print("===================")
