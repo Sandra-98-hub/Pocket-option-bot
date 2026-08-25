@@ -7,7 +7,6 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from threading import Thread
 
 from pocket_option import PocketOptionClient
-from pocket_option.constants import Regions
 from pocket_option.contrib.default_init import default_init
 from pocket_option.models import (
     Asset,
@@ -799,9 +798,7 @@ async def main():
     # REAL ACCOUNT
     # --------------------------------------------------------
 
-    await client.connect(
-        Regions.REAL
-    )
+    await client.connect()
 
     print(
         "POCKET OPTION CONNECTION ACTIVE"
