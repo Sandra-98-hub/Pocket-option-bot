@@ -1,8 +1,3 @@
-Library
-/
-otc_bot.py
-
-
 import os
 import asyncio
 from datetime import datetime, timezone
