@@ -51,7 +51,7 @@ OTC_MARKETS = [
 
 
 # ============================================================
-# STRATEGY
+# STRATEGY SETTINGS
 # ============================================================
 
 EMA_FAST = 9
@@ -75,13 +75,19 @@ logger = logging.getLogger("POCKET_OPTION_OTC")
 
 
 # ============================================================
+# CLIENT
+# ============================================================
+
+client = PocketOptionClient(logger=True)
+
+
+# ============================================================
 # HEALTH SERVER
 # ============================================================
 
 class HealthHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
-
         self.send_response(200)
         self.send_header("Content-Type", "text/plain")
         self.end_headers()
@@ -122,7 +128,7 @@ last_signal_minute = {}
 
 
 # ============================================================
-# ASSET NAMES
+# ASSET NAME MAP
 # ============================================================
 
 ASSET_NAMES = {
@@ -136,30 +142,40 @@ ASSET_NAMES = {
     Asset.USDCHF_otc: "USDCHF_otc",
 }
 
+ALLOWED_ASSET_NAMES = set(
+    ASSET_NAMES.values()
+)
+
 
 # ============================================================
 # INDICATORS
 # ============================================================
 
-def ema(values, period):
+def calculate_ema(values, period):
 
     if len(values) < period:
         return None
 
     multiplier = 2 / (period + 1)
 
-    result = sum(values[:period]) / period
+    result = sum(
+        values[:period]
+    ) / period
 
     for value in values[period:]:
+
         result = (
-            (value - result) * multiplier
-            + result
-        )
+            (value - result)
+            * multiplier
+        ) + result
 
     return result
 
 
-def rsi(values, period=14):
+def calculate_rsi(
+    values,
+    period=14,
+):
 
     if len(values) < period + 1:
         return None
@@ -169,31 +185,54 @@ def rsi(values, period=14):
 
     for i in range(1, len(values)):
 
-        change = values[i] - values[i - 1]
+        change = (
+            values[i]
+            - values[i - 1]
+        )
 
         if change > 0:
+
             gains.append(change)
             losses.append(0)
 
         else:
+
             gains.append(0)
-            losses.append(abs(change))
+            losses.append(
+                abs(change)
+            )
 
     if len(gains) < period:
         return None
 
-    avg_gain = sum(gains[:period]) / period
-    avg_loss = sum(losses[:period]) / period
+    avg_gain = (
+        sum(gains[:period])
+        / period
+    )
 
-    for i in range(period, len(gains)):
+    avg_loss = (
+        sum(losses[:period])
+        / period
+    )
+
+    for i in range(
+        period,
+        len(gains),
+    ):
 
         avg_gain = (
-            (avg_gain * (period - 1))
+            (
+                avg_gain
+                * (period - 1)
+            )
             + gains[i]
         ) / period
 
         avg_loss = (
-            (avg_loss * (period - 1))
+            (
+                avg_loss
+                * (period - 1)
+            )
             + losses[i]
         ) / period
 
@@ -202,11 +241,13 @@ def rsi(values, period=14):
 
     rs = avg_gain / avg_loss
 
-    return 100 - (100 / (1 + rs))
+    return 100 - (
+        100 / (1 + rs)
+    )
 
 
 # ============================================================
-# SIGNAL
+# SIGNAL ENGINE
 # ============================================================
 
 def calculate_signal(asset_name):
@@ -218,94 +259,94 @@ def calculate_signal(asset_name):
     if len(values) < MIN_PRICES:
         return None
 
-    current_price = values[-1]
+    price = values[-1]
 
-    fast_ema = ema(
+    ema9 = calculate_ema(
         values,
         EMA_FAST,
     )
 
-    slow_ema = ema(
+    ema21 = calculate_ema(
         values,
         EMA_SLOW,
     )
 
-    current_rsi = rsi(
+    rsi = calculate_rsi(
         values,
         RSI_PERIOD,
     )
 
     if (
-        fast_ema is None
-        or slow_ema is None
-        or current_rsi is None
+        ema9 is None
+        or ema21 is None
+        or rsi is None
     ):
         return None
 
     # --------------------------------------------------------
-    # BUY
+    # BUY SCORE
     # --------------------------------------------------------
 
     buy_score = 0
 
-    if fast_ema > slow_ema:
+    if ema9 > ema21:
         buy_score += 40
 
-    if current_price > fast_ema:
+    if price > ema9:
         buy_score += 20
 
-    if current_rsi > 50:
+    if rsi > 50:
         buy_score += 20
 
-    if current_rsi < 70:
+    if rsi < 70:
         buy_score += 20
 
     if (
         buy_score >= MIN_SCORE
-        and fast_ema > slow_ema
-        and current_rsi > 50
+        and ema9 > ema21
+        and rsi > 50
     ):
 
         return {
             "direction": "BUY",
             "score": buy_score,
-            "price": current_price,
-            "ema9": fast_ema,
-            "ema21": slow_ema,
-            "rsi": current_rsi,
+            "price": price,
+            "ema9": ema9,
+            "ema21": ema21,
+            "rsi": rsi,
         }
 
     # --------------------------------------------------------
-    # SELL
+    # SELL SCORE
     # --------------------------------------------------------
 
     sell_score = 0
 
-    if fast_ema < slow_ema:
+    if ema9 < ema21:
         sell_score += 40
 
-    if current_price < fast_ema:
+    if price < ema9:
         sell_score += 20
 
-    if current_rsi < 50:
+    if rsi < 50:
         sell_score += 20
 
-    if current_rsi > 30:
+    if rsi > 30:
         sell_score += 20
 
     if (
         sell_score >= MIN_SCORE
-        and fast_ema < slow_ema
-        and current_rsi < 50
+        and ema9 < ema21
+        and rsi < 50
     ):
 
         return {
             "direction": "SELL",
             "score": sell_score,
-            "price": current_price,
-            "ema9": fast_ema,
-            "ema21": slow_ema,
-            "rsi": current_rsi,
+            "price": price,
+            "ema9": ema9,
+            "ema21": ema21,
+            "rsi": rsi,
         }
 
     return None
@@ -315,25 +356,36 @@ def calculate_signal(asset_name):
 # PRINT SIGNAL
 # ============================================================
 
-def print_signal(asset_name, signal):
+def print_signal(
+    asset_name,
+    signal,
+):
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(
+        timezone.utc
+    )
 
     minute_key = now.strftime(
         "%Y-%m-%d %H:%M"
     )
 
     if (
-        last_signal_minute.get(asset_name)
+        last_signal_minute.get(
+            asset_name
+        )
         == minute_key
     ):
         return
 
-    last_signal_minute[asset_name] = minute_key
+    last_signal_minute[
+        asset_name
+    ] = minute_key
 
     print("")
     print("=" * 60)
-    print("🚨 LIVE POCKET OPTION OTC M1 SIGNAL 🚨")
+    print(
+        "🚨 LIVE POCKET OPTION OTC M1 SIGNAL 🚨"
+    )
     print("=" * 60)
 
     print(
@@ -345,7 +397,7 @@ def print_signal(asset_name, signal):
     )
 
     print(
-        f"TIME UTC:   "
+        "TIME UTC:   "
         f"{now.strftime('%Y-%m-%d %H:%M:%S')}"
     )
 
@@ -374,36 +426,56 @@ def print_signal(asset_name, signal):
         f"{signal['score']}%"
     )
 
-    print("SOURCE:     Pocket Option OTC")
-    print("TIMEFRAME:  M1")
-    print("TRADE:      OFF")
+    print(
+        "SOURCE:     Pocket Option OTC"
+    )
+
+    print(
+        "TIMEFRAME:  M1"
+    )
+
+    print(
+        "TRADE:      OFF"
+    )
 
     print("=" * 60)
     print("")
 
 
 # ============================================================
-# PROCESS PRICE
+# PROCESS REAL-TIME PRICE
 # ============================================================
 
-def process_price(asset_name, price):
+def process_price(
+    asset_name,
+    price,
+):
 
     try:
+
         price = float(price)
+
     except (
         TypeError,
         ValueError,
     ):
+
         return
 
     if price <= 0:
         return
 
-    last_price[asset_name] = price
+    last_price[
+        asset_name
+    ] = price
 
-    price_history[asset_name].append(price)
+    price_history[
+        asset_name
+    ].append(price)
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(
+        timezone.utc
+    )
 
     current_minute = now.replace(
         second=0,
@@ -414,10 +486,15 @@ def process_price(asset_name, price):
         asset_name
     )
 
-    if previous_minute == current_minute:
+    if (
+        previous_minute
+        == current_minute
+    ):
         return
 
-    last_minute[asset_name] = current_minute
+    last_minute[
+        asset_name
+    ] = current_minute
 
     count = len(
         price_history[asset_name]
@@ -435,7 +512,8 @@ def process_price(asset_name, price):
     if count < MIN_PRICES:
 
         print(
-            f"[DATA] {asset_name}: "
+            f"[DATA] "
+            f"{asset_name}: "
             f"collecting "
             f"{count}/{MIN_PRICES}"
         )
@@ -463,9 +541,344 @@ def process_price(asset_name, price):
 
 
 # ============================================================
-# REAL-TIME MARKET EVENT
+# EXTRACT ASSET NAME
 # ============================================================
 
-@client_event_placeholder
-async def unused_placeholder():
-    pass
+def get_asset_name(item):
+
+    if item is None:
+        return None
+
+    asset = getattr(
+        item,
+        "asset",
+        None,
+    )
+
+    if asset is not None:
+
+        if isinstance(
+            asset,
+            Asset,
+        ):
+
+            return ASSET_NAMES.get(
+                asset,
+                str(asset).split(".")[-1],
+            )
+
+        return str(asset).split(".")[-1]
+
+    symbol = getattr(
+        item,
+        "symbol",
+        None,
+    )
+
+    if symbol is not None:
+        return str(symbol)
+
+    return None
+
+
+# ============================================================
+# EXTRACT CLOSE VALUE
+# ============================================================
+
+def get_close_value(item):
+
+    for field in (
+        "close",
+        "value",
+        "price",
+    ):
+
+        value = getattr(
+            item,
+            field,
+            None,
+        )
+
+        if value is not None:
+
+            try:
+                return float(value)
+
+            except (
+                TypeError,
+                ValueError,
+            ):
+
+                pass
+
+    return None
+
+
+# ============================================================
+# OFFICIAL 0.4.0 UPDATE STREAM EVENT
+# ============================================================
+
+@client.on.update_close_value
+async def on_update_close_value(
+    assets: list[UpdateCloseValueItem],
+):
+
+    try:
+
+        for item in assets:
+
+            asset_name = get_asset_name(
+                item
+            )
+
+            close_value = get_close_value(
+                item
+            )
+
+            if not asset_name:
+                continue
+
+            if asset_name not in ALLOWED_ASSET_NAMES:
+                continue
+
+            if close_value is None:
+                continue
+
+            process_price(
+                asset_name,
+                close_value,
+            )
+
+    except Exception:
+
+        logger.exception(
+            "ERROR PROCESSING UPDATE STREAM"
+        )
+
+
+# ============================================================
+# CONNECTION EVENTS
+# ============================================================
+
+@client.on.connect
+async def on_connect():
+
+    print(
+        "POCKET OPTION SOCKET CONNECTED"
+    )
+
+
+@client.on.disconnect
+async def on_disconnect():
+
+    print(
+        "POCKET OPTION SOCKET DISCONNECTED"
+    )
+
+
+@client.on.success_auth
+async def on_success_auth(data=None):
+
+    print(
+        "POCKET OPTION AUTHORIZATION SUCCESSFUL"
+    )
+
+
+# ============================================================
+# MAIN
+# ============================================================
+
+async def main():
+
+    session = os.getenv(
+        "PO_SESSION"
+    )
+
+    uid = os.getenv(
+        "PO_UID"
+    )
+
+    if not session:
+
+        print(
+            "ERROR: PO_SESSION is missing"
+        )
+
+        return
+
+    if not uid:
+
+        print(
+            "ERROR: PO_UID is missing"
+        )
+
+        return
+
+    print(
+        "ACCOUNT MODE:",
+        ACCOUNT_MODE,
+    )
+
+    print(
+        "TIMEFRAME:",
+        TIMEFRAME,
+    )
+
+    print(
+        "SIGNAL ONLY"
+    )
+
+    print(
+        "AUTOMATIC TRADING: OFF"
+    )
+
+    print(
+        "PO_SESSION found"
+    )
+
+    print(
+        "PO_UID found"
+    )
+
+    # --------------------------------------------------------
+    # Authorization
+    # --------------------------------------------------------
+
+    authorization = (
+        AuthorizationData.model_validate(
+            {
+                "session": session,
+                "isDemo": 0,
+                "uid": int(uid),
+                "platform": 2,
+                "isFastHistory": True,
+                "isOptimized": True,
+            }
+        )
+    )
+
+    print(
+        "AUTHORIZATION DATA CREATED"
+    )
+
+    print(
+        "Pocket Option client created"
+    )
+
+    # --------------------------------------------------------
+    # Official 0.4.0 initialization
+    # --------------------------------------------------------
+
+    default_init(
+        client,
+        authorization=authorization,
+        sub_assets=OTC_MARKETS,
+        sub_period=CANDLE_PERIOD,
+    )
+
+    print(
+        "M1 CANDLE STORAGE INITIALIZED"
+    )
+
+    print(
+        f"{len(OTC_MARKETS)} "
+        "OTC MARKETS REGISTERED"
+    )
+
+    for asset in OTC_MARKETS:
+
+        print(
+            f"WATCHING: {ASSET_NAMES[asset]}"
+        )
+
+    print(
+        "CONNECTING TO POCKET OPTION..."
+    )
+
+    # --------------------------------------------------------
+    # REAL ACCOUNT
+    # --------------------------------------------------------
+
+    await client.connect(
+        Regions.REAL
+    )
+
+    print(
+        "POCKET OPTION CONNECTION ACTIVE"
+    )
+
+    print("")
+    print("=" * 60)
+    print(
+        "REAL ACCOUNT CONNECTION READY"
+    )
+    print(
+        "8 OTC MARKETS REGISTERED"
+    )
+    print(
+        "M1 MARKET DATA MONITORING ACTIVE"
+    )
+    print(
+        "SIGNAL ONLY"
+    )
+    print(
+        "AUTOMATIC TRADING: OFF"
+    )
+    print(
+        "WAITING FOR OTC MARKET EVENTS..."
+    )
+    print("=" * 60)
+
+    # --------------------------------------------------------
+    # Keep service alive
+    # --------------------------------------------------------
+
+    while True:
+
+        await asyncio.sleep(30)
+
+        now = datetime.now(
+            timezone.utc
+        )
+
+        print(
+            "BOT ALIVE: "
+            f"{now.strftime('%Y-%m-%d %H:%M:%S')} UTC"
+        )
+
+
+# ============================================================
+# START
+# ============================================================
+
+if __name__ == "__main__":
+
+    health_thread = Thread(
+        target=start_health_server,
+        daemon=True,
+    )
+
+    health_thread.start()
+
+    try:
+
+        asyncio.run(main())
+
+    except KeyboardInterrupt:
+
+        print(
+            "BOT STOPPED"
+        )
+
+    except Exception as exc:
+
+        print("")
+        print(
+            "FATAL BOT ERROR"
+        )
+        print(
+            repr(exc)
+        )
+        print("")
+
+        raise
