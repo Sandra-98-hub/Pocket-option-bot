@@ -82,7 +82,7 @@ logger = logging.getLogger(
 
 
 # ============================================================
-# CLIENT
+# POCKET OPTION CLIENT
 # ============================================================
 
 client = PocketOptionClient(
@@ -577,7 +577,7 @@ def process_price(
 
 
 # ============================================================
-# POCKET OPTION REAL-TIME PRICE EVENT
+# REAL-TIME POCKET OPTION PRICE EVENT
 # ============================================================
 
 @client.on.update_close_value
@@ -653,7 +653,7 @@ async def on_disconnect(
 
 
 # ============================================================
-# AUTH EVENT
+# AUTHORIZATION EVENT
 # ============================================================
 
 @client.on.success_auth
@@ -667,7 +667,7 @@ async def on_success_auth(
 
 
 # ============================================================
-# REGION
+# GET REGION
 # ============================================================
 
 def get_region():
@@ -758,6 +758,10 @@ async def main():
     uid = os.getenv(
         "PO_UID"
     )
+
+    # --------------------------------------------------------
+    # CHECK ENVIRONMENT
+    # --------------------------------------------------------
 
     if not session:
 
@@ -852,7 +856,7 @@ async def main():
 
 
     # ========================================================
-    # INITIALIZE CLIENT
+    # INITIALIZE MARKET DATA
     # ========================================================
 
     try:
@@ -881,7 +885,8 @@ async def main():
     )
 
     print(
-        f"{len(OTC_MARKETS)} OTC MARKETS REGISTERED"
+        f"{len(OTC_MARKETS)} "
+        "OTC MARKETS REGISTERED"
     )
 
     for asset in OTC_MARKETS:
@@ -912,7 +917,8 @@ async def main():
     # CONNECT
     #
     # IMPORTANT:
-    # pocket-option 0.4.0 uses a Regions value here.
+    # 0.4.0 uses a Regions value here.
+    # NO PO_URL.
     # ========================================================
 
     try:
@@ -938,7 +944,7 @@ async def main():
 
 
     # ========================================================
-    # READY
+    # CONNECTION READY
     # ========================================================
 
     print("")
@@ -949,7 +955,7 @@ async def main():
     )
 
     print(
-        "REAL ACCOUNT AUTHENTICATION INITIALIZED"
+        "REAL ACCOUNT CONNECTION INITIALIZED"
     )
 
     print(
@@ -976,7 +982,7 @@ async def main():
 
 
     # ========================================================
-    # KEEP ALIVE
+    # KEEP BOT ALIVE
     # ========================================================
 
     while True:
