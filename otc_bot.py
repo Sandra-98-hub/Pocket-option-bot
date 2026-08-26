@@ -7,6 +7,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from threading import Thread
 
 from pocket_option import PocketOptionClient
+from pocket_option.constants import Regions
 from pocket_option.contrib.default_init import default_init
 from pocket_option.models import (
     Asset,
@@ -31,6 +32,13 @@ SIGNAL_ONLY = True
 AUTOMATIC_TRADING = False
 
 PORT = int(os.getenv("PORT", "10000"))
+
+# Real Pocket Option region.
+# Can be changed with the PO_REGION environment variable.
+REGION_NAME = os.getenv(
+    "PO_REGION",
+    "EUROPA",
+)
 
 
 # ============================================================
@@ -70,32 +78,48 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(message)s",
 )
 
-logger = logging.getLogger("POCKET_OPTION_OTC")
+logger = logging.getLogger(
+    "POCKET_OPTION_OTC"
+)
 
 
 # ============================================================
 # CLIENT
 # ============================================================
 
-client = PocketOptionClient(logger=True)
+client = PocketOptionClient(
+    logger=True
+)
 
 
 # ============================================================
 # HEALTH SERVER
 # ============================================================
 
-class HealthHandler(BaseHTTPRequestHandler):
+class HealthHandler(
+    BaseHTTPRequestHandler
+):
 
     def do_GET(self):
+
         self.send_response(200)
-        self.send_header("Content-Type", "text/plain")
+
+        self.send_header(
+            "Content-Type",
+            "text/plain"
+        )
+
         self.end_headers()
 
         self.wfile.write(
             b"Pocket Option OTC M1 Signal Bot is running"
         )
 
-    def log_message(self, format, *args):
+    def log_message(
+        self,
+        format,
+        *args
+    ):
         return
 
 
@@ -118,16 +142,20 @@ def start_health_server():
 # ============================================================
 
 price_history = defaultdict(
-    lambda: deque(maxlen=500)
+    lambda: deque(
+        maxlen=500
+    )
 )
 
 last_price = {}
+
 last_minute = {}
+
 last_signal_minute = {}
 
 
 # ============================================================
-# ASSET NAME MAP
+# ASSET NAMES
 # ============================================================
 
 ASSET_NAMES = {
@@ -141,39 +169,51 @@ ASSET_NAMES = {
     Asset.USDCHF_otc: "USDCHF_otc",
 }
 
-ALLOWED_ASSET_NAMES = set(
+ALLOWED_ASSETS = set(
     ASSET_NAMES.values()
 )
 
 
 # ============================================================
-# INDICATORS
+# EMA
 # ============================================================
 
-def calculate_ema(values, period):
+def calculate_ema(
+    values,
+    period
+):
 
     if len(values) < period:
         return None
 
-    multiplier = 2 / (period + 1)
+    multiplier = 2 / (
+        period + 1
+    )
 
-    result = sum(
-        values[:period]
-    ) / period
+    result = (
+        sum(values[:period])
+        / period
+    )
 
     for value in values[period:]:
 
         result = (
-            (value - result)
+            (
+                value - result
+            )
             * multiplier
         ) + result
 
     return result
 
 
+# ============================================================
+# RSI
+# ============================================================
+
 def calculate_rsi(
     values,
-    period=14,
+    period=14
 ):
 
     if len(values) < period + 1:
@@ -182,11 +222,14 @@ def calculate_rsi(
     gains = []
     losses = []
 
-    for i in range(1, len(values)):
+    for index in range(
+        1,
+        len(values)
+    ):
 
         change = (
-            values[i]
-            - values[i - 1]
+            values[index]
+            - values[index - 1]
         )
 
         if change > 0:
@@ -204,41 +247,44 @@ def calculate_rsi(
     if len(gains) < period:
         return None
 
-    avg_gain = (
+    average_gain = (
         sum(gains[:period])
         / period
     )
 
-    avg_loss = (
+    average_loss = (
         sum(losses[:period])
         / period
     )
 
-    for i in range(
+    for index in range(
         period,
-        len(gains),
+        len(gains)
     ):
 
-        avg_gain = (
+        average_gain = (
             (
-                avg_gain
+                average_gain
                 * (period - 1)
             )
-            + gains[i]
+            + gains[index]
         ) / period
 
-        avg_loss = (
+        average_loss = (
             (
-                avg_loss
+                average_loss
                 * (period - 1)
             )
-            + losses[i]
+            + losses[index]
         ) / period
 
-    if avg_loss == 0:
+    if average_loss == 0:
         return 100.0
 
-    rs = avg_gain / avg_loss
+    rs = (
+        average_gain
+        / average_loss
+    )
 
     return 100 - (
         100 / (1 + rs)
@@ -249,7 +295,9 @@ def calculate_rsi(
 # SIGNAL ENGINE
 # ============================================================
 
-def calculate_signal(asset_name):
+def calculate_signal(
+    asset_name
+):
 
     values = list(
         price_history[asset_name]
@@ -262,17 +310,17 @@ def calculate_signal(asset_name):
 
     ema9 = calculate_ema(
         values,
-        EMA_FAST,
+        EMA_FAST
     )
 
     ema21 = calculate_ema(
         values,
-        EMA_SLOW,
+        EMA_SLOW
     )
 
     rsi = calculate_rsi(
         values,
-        RSI_PERIOD,
+        RSI_PERIOD
     )
 
     if (
@@ -283,7 +331,7 @@ def calculate_signal(asset_name):
         return None
 
     # --------------------------------------------------------
-    # BUY SCORE
+    # BUY
     # --------------------------------------------------------
 
     buy_score = 0
@@ -316,7 +364,7 @@ def calculate_signal(asset_name):
         }
 
     # --------------------------------------------------------
-    # SELL SCORE
+    # SELL
     # --------------------------------------------------------
 
     sell_score = 0
@@ -357,7 +405,7 @@ def calculate_signal(asset_name):
 
 def print_signal(
     asset_name,
-    signal,
+    signal
 ):
 
     now = datetime.now(
@@ -434,7 +482,7 @@ def print_signal(
     )
 
     print(
-        "TRADE:      OFF"
+        "AUTOMATIC:  OFF"
     )
 
     print("=" * 60)
@@ -442,12 +490,12 @@ def print_signal(
 
 
 # ============================================================
-# PROCESS REAL-TIME PRICE
+# PROCESS PRICE
 # ============================================================
 
 def process_price(
     asset_name,
-    price,
+    price
 ):
 
     try:
@@ -456,7 +504,7 @@ def process_price(
 
     except (
         TypeError,
-        ValueError,
+        ValueError
     ):
 
         return
@@ -478,7 +526,7 @@ def process_price(
 
     current_minute = now.replace(
         second=0,
-        microsecond=0,
+        microsecond=0
     )
 
     previous_minute = last_minute.get(
@@ -496,7 +544,9 @@ def process_price(
     ] = current_minute
 
     count = len(
-        price_history[asset_name]
+        price_history[
+            asset_name
+        ]
     )
 
     print(
@@ -527,7 +577,7 @@ def process_price(
 
         print_signal(
             asset_name,
-            signal,
+            signal
         )
 
     else:
@@ -540,81 +590,7 @@ def process_price(
 
 
 # ============================================================
-# EXTRACT ASSET NAME
-# ============================================================
-
-def get_asset_name(item):
-
-    if item is None:
-        return None
-
-    asset = getattr(
-        item,
-        "asset",
-        None,
-    )
-
-    if asset is not None:
-
-        if isinstance(
-            asset,
-            Asset,
-        ):
-
-            return ASSET_NAMES.get(
-                asset,
-                str(asset).split(".")[-1],
-            )
-
-        return str(asset).split(".")[-1]
-
-    symbol = getattr(
-        item,
-        "symbol",
-        None,
-    )
-
-    if symbol is not None:
-        return str(symbol)
-
-    return None
-
-
-# ============================================================
-# EXTRACT CLOSE VALUE
-# ============================================================
-
-def get_close_value(item):
-
-    for field in (
-        "close",
-        "value",
-        "price",
-    ):
-
-        value = getattr(
-            item,
-            field,
-            None,
-        )
-
-        if value is not None:
-
-            try:
-                return float(value)
-
-            except (
-                TypeError,
-                ValueError,
-            ):
-
-                pass
-
-    return None
-
-
-# ============================================================
-# OFFICIAL 0.4.0 UPDATE STREAM EVENT
+# OFFICIAL 0.4.0 REAL-TIME PRICE EVENT
 # ============================================================
 
 @client.on.update_close_value
@@ -626,61 +602,154 @@ async def on_update_close_value(
 
         for item in assets:
 
-            asset_name = get_asset_name(
-                item
-            )
-
-            close_value = get_close_value(
-                item
+            asset_name = (
+                ASSET_NAMES.get(
+                    item.asset
+                )
             )
 
             if not asset_name:
                 continue
 
-            if asset_name not in ALLOWED_ASSET_NAMES:
+            if asset_name not in ALLOWED_ASSETS:
                 continue
 
-            if close_value is None:
-                continue
+            price = float(
+                item.value
+            )
 
             process_price(
                 asset_name,
-                close_value,
+                price
             )
 
     except Exception:
 
         logger.exception(
-            "ERROR PROCESSING UPDATE STREAM"
+            "ERROR PROCESSING OTC PRICE UPDATE"
         )
 
 
 # ============================================================
-# CONNECTION EVENTS
+# CONNECTION EVENT
 # ============================================================
 
 @client.on.connect
-async def on_connect():
+async def on_connect(
+    _data=None
+):
 
     print(
         "POCKET OPTION SOCKET CONNECTED"
     )
 
 
+# ============================================================
+# DISCONNECT EVENT
+# ============================================================
+
 @client.on.disconnect
-async def on_disconnect():
+async def on_disconnect(
+    _data=None
+):
 
     print(
         "POCKET OPTION SOCKET DISCONNECTED"
     )
 
 
+# ============================================================
+# AUTHORIZATION EVENT
+# ============================================================
+
 @client.on.success_auth
-async def on_success_auth(data=None):
+async def on_success_auth(
+    data=None
+):
 
     print(
         "POCKET OPTION AUTHORIZATION SUCCESSFUL"
     )
+
+
+# ============================================================
+# GET REGION
+# ============================================================
+
+def get_region():
+
+    region_map = {
+
+        "EUROPA":
+            Regions.EUROPA,
+
+        "ASIA":
+            Regions.ASIA,
+
+        "UNITED_STATES_NORTH":
+            Regions.UNITED_STATES_NORTH,
+
+        "UNITED_STATES_SOUTH":
+            Regions.UNITED_STATES_SOUTH,
+
+        "UNITED_STATES_2":
+            Regions.UNITED_STATES_2,
+
+        "UNITED_STATES_3":
+            Regions.UNITED_STATES_3,
+
+        "UNITED_STATES_4":
+            Regions.UNITED_STATES_4,
+
+        "FRANCE_1":
+            Regions.FRANCE_1,
+
+        "FRANCE_2":
+            Regions.FRANCE_2,
+
+        "RUSSIA":
+            Regions.RUSSIA,
+
+        "INDIA":
+            Regions.INDIA,
+
+        "FINLAND":
+            Regions.FINLAND,
+
+        "SEYCHELLES":
+            Regions.SEYCHELLES,
+
+        "HONGKONG":
+            Regions.HONGKONG,
+
+        "SERVER_1":
+            Regions.SERVER_1,
+
+        "SERVER_2":
+            Regions.SERVER_2,
+
+        "SERVER_3":
+            Regions.SERVER_3,
+    }
+
+    region = region_map.get(
+        REGION_NAME.upper()
+    )
+
+    if region is None:
+
+        print(
+            f"Unknown PO_REGION: "
+            f"{REGION_NAME}"
+        )
+
+        print(
+            "Using EUROPA"
+        )
+
+        region = Regions.EUROPA
+
+    return region
 
 
 # ============================================================
@@ -700,7 +769,7 @@ async def main():
     if not session:
 
         print(
-            "ERROR: PO_SESSION is missing"
+            "FATAL: PO_SESSION is missing"
         )
 
         return
@@ -708,19 +777,19 @@ async def main():
     if not uid:
 
         print(
-            "ERROR: PO_UID is missing"
+            "FATAL: PO_UID is missing"
         )
 
         return
 
     print(
         "ACCOUNT MODE:",
-        ACCOUNT_MODE,
+        ACCOUNT_MODE
     )
 
     print(
         "TIMEFRAME:",
-        TIMEFRAME,
+        TIMEFRAME
     )
 
     print(
@@ -740,7 +809,7 @@ async def main():
     )
 
     # --------------------------------------------------------
-    # Authorization
+    # REAL ACCOUNT AUTHORIZATION
     # --------------------------------------------------------
 
     authorization = (
@@ -765,7 +834,7 @@ async def main():
     )
 
     # --------------------------------------------------------
-    # Official 0.4.0 initialization
+    # INITIALIZE MARKET DATA
     # --------------------------------------------------------
 
     default_init(
@@ -787,18 +856,32 @@ async def main():
     for asset in OTC_MARKETS:
 
         print(
-            f"WATCHING: {ASSET_NAMES[asset]}"
+            "WATCHING:",
+            ASSET_NAMES[asset]
         )
+
+    # --------------------------------------------------------
+    # REGION
+    # --------------------------------------------------------
+
+    region = get_region()
+
+    print(
+        "POCKET OPTION REGION:",
+        REGION_NAME.upper()
+    )
 
     print(
         "CONNECTING TO POCKET OPTION..."
     )
 
     # --------------------------------------------------------
-    # REAL ACCOUNT
+    # CONNECT
     # --------------------------------------------------------
 
-    await client.connect()
+    await client.connect(
+        region
+    )
 
     print(
         "POCKET OPTION CONNECTION ACTIVE"
@@ -827,7 +910,7 @@ async def main():
     print("=" * 60)
 
     # --------------------------------------------------------
-    # Keep service alive
+    # KEEP RENDER ALIVE
     # --------------------------------------------------------
 
     while True:
@@ -852,14 +935,16 @@ if __name__ == "__main__":
 
     health_thread = Thread(
         target=start_health_server,
-        daemon=True,
+        daemon=True
     )
 
     health_thread.start()
 
     try:
 
-        asyncio.run(main())
+        asyncio.run(
+            main()
+        )
 
     except KeyboardInterrupt:
 
@@ -873,9 +958,11 @@ if __name__ == "__main__":
         print(
             "FATAL BOT ERROR"
         )
+
         print(
             repr(exc)
         )
+
         print("")
 
         raise
