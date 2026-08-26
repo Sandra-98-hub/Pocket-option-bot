@@ -38,13 +38,6 @@ REGION_NAME = os.getenv(
     "EUROPA"
 )
 
-# Pocket Option websocket URL.
-# You can override this with PO_URL in Render.
-PO_URL = os.getenv(
-    "PO_URL",
-    "wss://api-us-po.com/socket.io/?EIO=3&transport=websocket"
-)
-
 
 # ============================================================
 # OTC MARKETS
@@ -63,7 +56,7 @@ OTC_MARKETS = [
 
 
 # ============================================================
-# STRATEGY
+# STRATEGY SETTINGS
 # ============================================================
 
 EMA_FAST = 9
@@ -80,7 +73,7 @@ MIN_SCORE = 80
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s"
+    format="%(asctime)s | %(levelname)s | %(message)s",
 )
 
 logger = logging.getLogger(
@@ -98,7 +91,7 @@ client = PocketOptionClient(
 
 
 # ============================================================
-# HEALTH SERVER
+# RENDER HEALTH SERVER
 # ============================================================
 
 class HealthHandler(BaseHTTPRequestHandler):
@@ -356,7 +349,7 @@ def calculate_signal(
             "price": price,
             "ema9": ema9,
             "ema21": ema21,
-            "rsi": rsi
+            "rsi": rsi,
         }
 
 
@@ -390,7 +383,7 @@ def calculate_signal(
             "price": price,
             "ema9": ema9,
             "ema21": ema21,
-            "rsi": rsi
+            "rsi": rsi,
         }
 
     return None
@@ -584,12 +577,12 @@ def process_price(
 
 
 # ============================================================
-# REAL-TIME PRICE EVENT
+# POCKET OPTION REAL-TIME PRICE EVENT
 # ============================================================
 
 @client.on.update_close_value
 async def on_update_close_value(
-    assets: list[UpdateCloseValueItem]
+    assets: list[UpdateCloseValueItem],
 ):
 
     try:
@@ -606,9 +599,18 @@ async def on_update_close_value(
             if asset_name not in ALLOWED_ASSETS:
                 continue
 
-            price = float(
-                item.value
-            )
+            try:
+
+                price = float(
+                    item.value
+                )
+
+            except (
+                TypeError,
+                ValueError
+            ):
+
+                continue
 
             process_price(
                 asset_name,
@@ -651,7 +653,7 @@ async def on_disconnect(
 
 
 # ============================================================
-# AUTHORIZATION EVENT
+# AUTH EVENT
 # ============================================================
 
 @client.on.success_auth
@@ -731,8 +733,7 @@ def get_region():
     if region is None:
 
         print(
-            f"Unknown PO_REGION: "
-            f"{REGION_NAME}"
+            f"Unknown PO_REGION: {REGION_NAME}"
         )
 
         print(
@@ -774,6 +775,19 @@ async def main():
 
         return
 
+    try:
+
+        uid_number = int(uid)
+
+    except ValueError:
+
+        print(
+            "FATAL: PO_UID must be a number"
+        )
+
+        return
+
+
     print(
         "ACCOUNT MODE:",
         ACCOUNT_MODE
@@ -812,7 +826,7 @@ async def main():
                 {
                     "session": session,
                     "isDemo": 0,
-                    "uid": int(uid),
+                    "uid": uid_number,
                     "platform": 2,
                     "isFastHistory": True,
                     "isOptimized": True,
@@ -836,13 +850,9 @@ async def main():
         "AUTHORIZATION DATA CREATED"
     )
 
-    print(
-        "Pocket Option client created"
-    )
-
 
     # ========================================================
-    # INITIALIZE MARKET DATA
+    # INITIALIZE CLIENT
     # ========================================================
 
     try:
@@ -857,7 +867,7 @@ async def main():
     except Exception as exc:
 
         print(
-            "DEFAULT INITIALIZATION ERROR:"
+            "DEFAULT INIT ERROR:"
         )
 
         print(
@@ -871,8 +881,7 @@ async def main():
     )
 
     print(
-        f"{len(OTC_MARKETS)} "
-        "OTC MARKETS REGISTERED"
+        f"{len(OTC_MARKETS)} OTC MARKETS REGISTERED"
     )
 
     for asset in OTC_MARKETS:
@@ -895,46 +904,22 @@ async def main():
     )
 
     print(
-        "POCKET OPTION URL:"
-    )
-
-    print(
-        PO_URL
-    )
-
-    print(
         "CONNECTING TO POCKET OPTION..."
     )
 
 
     # ========================================================
     # CONNECT
+    #
+    # IMPORTANT:
+    # pocket-option 0.4.0 uses a Regions value here.
     # ========================================================
 
     try:
 
         await client.connect(
-            PO_URL
+            region
         )
-
-    except TypeError as exc:
-
-        print("")
-        print(
-            "CONNECTION TYPE ERROR"
-        )
-
-        print(
-            repr(exc)
-        )
-
-        print("")
-        print(
-            "The installed pocket-option 0.4.0 "
-            "package requires a URL for connect()."
-        )
-
-        raise
 
     except Exception as exc:
 
@@ -960,7 +945,11 @@ async def main():
     print("=" * 60)
 
     print(
-        "REAL ACCOUNT CONNECTION READY"
+        "POCKET OPTION CONNECTION ACTIVE"
+    )
+
+    print(
+        "REAL ACCOUNT AUTHENTICATION INITIALIZED"
     )
 
     print(
@@ -987,7 +976,7 @@ async def main():
 
 
     # ========================================================
-    # KEEP BOT ALIVE
+    # KEEP ALIVE
     # ========================================================
 
     while True:
