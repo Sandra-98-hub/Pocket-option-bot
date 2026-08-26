@@ -33,11 +33,16 @@ AUTOMATIC_TRADING = False
 
 PORT = int(os.getenv("PORT", "10000"))
 
-# Real Pocket Option region.
-# Can be changed with the PO_REGION environment variable.
 REGION_NAME = os.getenv(
     "PO_REGION",
-    "EUROPA",
+    "EUROPA"
+)
+
+# Pocket Option websocket URL.
+# You can override this with PO_URL in Render.
+PO_URL = os.getenv(
+    "PO_URL",
+    "wss://api-us-po.com/socket.io/?EIO=3&transport=websocket"
 )
 
 
@@ -58,7 +63,7 @@ OTC_MARKETS = [
 
 
 # ============================================================
-# STRATEGY SETTINGS
+# STRATEGY
 # ============================================================
 
 EMA_FAST = 9
@@ -75,7 +80,7 @@ MIN_SCORE = 80
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s | %(levelname)s | %(message)s",
+    format="%(asctime)s | %(levelname)s | %(message)s"
 )
 
 logger = logging.getLogger(
@@ -96,9 +101,7 @@ client = PocketOptionClient(
 # HEALTH SERVER
 # ============================================================
 
-class HealthHandler(
-    BaseHTTPRequestHandler
-):
+class HealthHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
 
@@ -127,7 +130,7 @@ def start_health_server():
 
     server = HTTPServer(
         ("0.0.0.0", PORT),
-        HealthHandler,
+        HealthHandler
     )
 
     print(
@@ -178,17 +181,12 @@ ALLOWED_ASSETS = set(
 # EMA
 # ============================================================
 
-def calculate_ema(
-    values,
-    period
-):
+def calculate_ema(values, period):
 
     if len(values) < period:
         return None
 
-    multiplier = 2 / (
-        period + 1
-    )
+    multiplier = 2 / (period + 1)
 
     result = (
         sum(values[:period])
@@ -198,9 +196,7 @@ def calculate_ema(
     for value in values[period:]:
 
         result = (
-            (
-                value - result
-            )
+            (value - result)
             * multiplier
         ) + result
 
@@ -240,9 +236,7 @@ def calculate_rsi(
         else:
 
             gains.append(0)
-            losses.append(
-                abs(change)
-            )
+            losses.append(abs(change))
 
     if len(gains) < period:
         return None
@@ -279,6 +273,7 @@ def calculate_rsi(
         ) / period
 
     if average_loss == 0:
+
         return 100.0
 
     rs = (
@@ -330,9 +325,10 @@ def calculate_signal(
     ):
         return None
 
-    # --------------------------------------------------------
+
+    # ========================================================
     # BUY
-    # --------------------------------------------------------
+    # ========================================================
 
     buy_score = 0
 
@@ -360,12 +356,13 @@ def calculate_signal(
             "price": price,
             "ema9": ema9,
             "ema21": ema21,
-            "rsi": rsi,
+            "rsi": rsi
         }
 
-    # --------------------------------------------------------
+
+    # ========================================================
     # SELL
-    # --------------------------------------------------------
+    # ========================================================
 
     sell_score = 0
 
@@ -393,7 +390,7 @@ def calculate_signal(
             "price": price,
             "ema9": ema9,
             "ema21": ema21,
-            "rsi": rsi,
+            "rsi": rsi
         }
 
     return None
@@ -533,10 +530,7 @@ def process_price(
         asset_name
     )
 
-    if (
-        previous_minute
-        == current_minute
-    ):
+    if previous_minute == current_minute:
         return
 
     last_minute[
@@ -590,22 +584,20 @@ def process_price(
 
 
 # ============================================================
-# OFFICIAL 0.4.0 REAL-TIME PRICE EVENT
+# REAL-TIME PRICE EVENT
 # ============================================================
 
 @client.on.update_close_value
 async def on_update_close_value(
-    assets: list[UpdateCloseValueItem],
+    assets: list[UpdateCloseValueItem]
 ):
 
     try:
 
         for item in assets:
 
-            asset_name = (
-                ASSET_NAMES.get(
-                    item.asset
-                )
+            asset_name = ASSET_NAMES.get(
+                item.asset
             )
 
             if not asset_name:
@@ -673,7 +665,7 @@ async def on_success_auth(
 
 
 # ============================================================
-# GET REGION
+# REGION
 # ============================================================
 
 def get_region():
@@ -808,22 +800,37 @@ async def main():
         "PO_UID found"
     )
 
-    # --------------------------------------------------------
-    # REAL ACCOUNT AUTHORIZATION
-    # --------------------------------------------------------
 
-    authorization = (
-        AuthorizationData.model_validate(
-            {
-                "session": session,
-                "isDemo": 0,
-                "uid": int(uid),
-                "platform": 2,
-                "isFastHistory": True,
-                "isOptimized": True,
-            }
+    # ========================================================
+    # AUTHORIZATION
+    # ========================================================
+
+    try:
+
+        authorization = (
+            AuthorizationData.model_validate(
+                {
+                    "session": session,
+                    "isDemo": 0,
+                    "uid": int(uid),
+                    "platform": 2,
+                    "isFastHistory": True,
+                    "isOptimized": True,
+                }
+            )
         )
-    )
+
+    except Exception as exc:
+
+        print(
+            "AUTHORIZATION DATA ERROR:"
+        )
+
+        print(
+            repr(exc)
+        )
+
+        return
 
     print(
         "AUTHORIZATION DATA CREATED"
@@ -833,16 +840,31 @@ async def main():
         "Pocket Option client created"
     )
 
-    # --------------------------------------------------------
-    # INITIALIZE MARKET DATA
-    # --------------------------------------------------------
 
-    default_init(
-        client,
-        authorization=authorization,
-        sub_assets=OTC_MARKETS,
-        sub_period=CANDLE_PERIOD,
-    )
+    # ========================================================
+    # INITIALIZE MARKET DATA
+    # ========================================================
+
+    try:
+
+        default_init(
+            client,
+            authorization=authorization,
+            sub_assets=OTC_MARKETS,
+            sub_period=CANDLE_PERIOD,
+        )
+
+    except Exception as exc:
+
+        print(
+            "DEFAULT INITIALIZATION ERROR:"
+        )
+
+        print(
+            repr(exc)
+        )
+
+        return
 
     print(
         "M1 CANDLE STORAGE INITIALIZED"
@@ -860,9 +882,10 @@ async def main():
             ASSET_NAMES[asset]
         )
 
-    # --------------------------------------------------------
+
+    # ========================================================
     # REGION
-    # --------------------------------------------------------
+    # ========================================================
 
     region = get_region()
 
@@ -872,46 +895,100 @@ async def main():
     )
 
     print(
+        "POCKET OPTION URL:"
+    )
+
+    print(
+        PO_URL
+    )
+
+    print(
         "CONNECTING TO POCKET OPTION..."
     )
 
-    # --------------------------------------------------------
+
+    # ========================================================
     # CONNECT
-    # --------------------------------------------------------
+    # ========================================================
 
-    await client.connect(
-        region
-    )
+    try:
 
-    print(
-        "POCKET OPTION CONNECTION ACTIVE"
-    )
+        await client.connect(
+            PO_URL
+        )
+
+    except TypeError as exc:
+
+        print("")
+        print(
+            "CONNECTION TYPE ERROR"
+        )
+
+        print(
+            repr(exc)
+        )
+
+        print("")
+        print(
+            "The installed pocket-option 0.4.0 "
+            "package requires a URL for connect()."
+        )
+
+        raise
+
+    except Exception as exc:
+
+        print("")
+        print(
+            "POCKET OPTION CONNECTION ERROR"
+        )
+
+        print(
+            repr(exc)
+        )
+
+        print("")
+
+        raise
+
+
+    # ========================================================
+    # READY
+    # ========================================================
 
     print("")
     print("=" * 60)
+
     print(
         "REAL ACCOUNT CONNECTION READY"
     )
+
     print(
         "8 OTC MARKETS REGISTERED"
     )
+
     print(
         "M1 MARKET DATA MONITORING ACTIVE"
     )
+
     print(
         "SIGNAL ONLY"
     )
+
     print(
         "AUTOMATIC TRADING: OFF"
     )
+
     print(
         "WAITING FOR OTC MARKET EVENTS..."
     )
+
     print("=" * 60)
 
-    # --------------------------------------------------------
-    # KEEP RENDER ALIVE
-    # --------------------------------------------------------
+
+    # ========================================================
+    # KEEP BOT ALIVE
+    # ========================================================
 
     while True:
 
